@@ -1,0 +1,1358 @@
+{
+  "languages": [
+    {
+      "code": "en",
+      "name": "English (Built-in)",
+      "file": null
+    },
+    {
+      "code": "ca",
+      "name": "Catalan",
+      "file": "Catalan.gla"
+    },
+    {
+      "code": "hr",
+      "name": "Croatian",
+      "file": "Croatian.gla"
+    },
+    {
+      "code": "cs",
+      "name": "Czech",
+      "file": "Czech.gla"
+    },
+    {
+      "code": "da",
+      "name": "Danish",
+      "file": "Danish.gla"
+    },
+    {
+      "code": "nl",
+      "name": "Dutch",
+      "file": "Dutch.gla"
+    },
+    {
+      "code": "fi",
+      "name": "Finnish",
+      "file": "Finnish.gla"
+    },
+    {
+      "code": "fr",
+      "name": "French",
+      "file": "French.gla"
+    },
+    {
+      "code": "de",
+      "name": "German",
+      "file": "German.gla"
+    },
+    {
+      "code": "hu",
+      "name": "Hungarian",
+      "file": "Hungarian.gla"
+    },
+    {
+      "code": "it",
+      "name": "Italian",
+      "file": "Italian.gla"
+    },
+    {
+      "code": "pl",
+      "name": "Polish",
+      "file": "Polish.gla"
+    },
+    {
+      "code": "pt-br",
+      "name": "Portuguese (Brazil)",
+      "file": "PortuguesBrazil.gla"
+    },
+    {
+      "code": "pt",
+      "name": "Portuguese",
+      "file": "Portuguese.gla"
+    },
+    {
+      "code": "ro",
+      "name": "Romanian",
+      "file": "Romanian.gla"
+    },
+    {
+      "code": "sl",
+      "name": "Slovenian",
+      "file": "Slovenian.gla"
+    },
+    {
+      "code": "es",
+      "name": "Spanish",
+      "file": "Spanish.gla"
+    },
+    {
+      "code": "sv",
+      "name": "Swedish",
+      "file": "Swedish.gla"
+    },
+    {
+      "code": "tr",
+      "name": "Turkish",
+      "file": "Turkish.gla"
+    }
+  ],
+  "donor": {
+    "STM32": {
+      "expectedFilename": "MD9600-CSV(2571V5)-V26.45.bin",
+      "path": "donor/MD9600-CSV(2571V5)-V26.45.bin",
+      "exists": true,
+      "size": 1096192
+    },
+    "MK22": {
+      "expectedFilename": "GD-77_V4.3.6.sgl",
+      "path": "donor/GD-77_V4.3.6.sgl",
+      "exists": true,
+      "size": 494698
+    }
+  },
+  "radioTypes": {
+    "MK22": {
+      "displayName": "MK22 Radios",
+      "description": "GD-77, DM-1801, DM-1801A, RD-5R, GD-77S",
+      "chipType": "MK22",
+      "firmwareExtension": ".sgl,.bin",
+      "models": {
+        "OpenGD77": "GD-77",
+        "OpenGD77S": "GD-77S",
+        "OpenDM1801": "DM-1801",
+        "OpenDM1801A": "DM-1801A",
+        "OpenRD5R": "RD-5R"
+      },
+      "versions": {
+        "R20260131": {
+          "display": "2026-01-31",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801_NMEA.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801_NMEA.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801_NMEA_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801_NMEA_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801A.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801A_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801A_NMEA.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801A_NMEA.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801A_NMEA_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenDM1801A_NMEA_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20260131/firmware/OpenGD77.bin",
+                  "size": 502768,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenGD77_Japanese.bin",
+                  "size": 502768,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenGD77_NMEA.bin",
+                  "path": "MK22/R20260131/firmware/OpenGD77_NMEA.bin",
+                  "size": 502768,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenGD77_NMEA_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenGD77_NMEA_Japanese.bin",
+                  "size": 502768,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20260131/firmware/OpenGD77S.bin",
+                  "size": 494708,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20260131/firmware/OpenRD5R.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_Japanese.bin",
+                  "path": "MK22/R20260131/firmware/OpenRD5R_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MK22/R20260131/firmware"
+        },
+        "R20240908": {
+          "display": "2024-09-08",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801_NMEA.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801_NMEA.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801_NMEA_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801_NMEA_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801A.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801A_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801A_NMEA.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801A_NMEA.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801A_NMEA_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenDM1801A_NMEA_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20240908/firmware/OpenGD77.bin",
+                  "size": 502768,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenGD77_Japanese.bin",
+                  "size": 502768,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenGD77_NMEA.bin",
+                  "path": "MK22/R20240908/firmware/OpenGD77_NMEA.bin",
+                  "size": 502768,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenGD77_NMEA_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenGD77_NMEA_Japanese.bin",
+                  "size": 502768,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20240908/firmware/OpenGD77S.bin",
+                  "size": 494708,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20240908/firmware/OpenRD5R.bin",
+                  "size": 502760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_Japanese.bin",
+                  "path": "MK22/R20240908/firmware/OpenRD5R_Japanese.bin",
+                  "size": 502760,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MK22/R20240908/firmware"
+        },
+        "R20231231": {
+          "display": "2023-12-31",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801.bin",
+                  "size": 502860,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801_Japanese.bin",
+                  "size": 502860,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801_NMEA.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801_NMEA.bin",
+                  "size": 502860,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801_NMEA_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801_NMEA_Japanese.bin",
+                  "size": 502860,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801A.bin",
+                  "size": 502860,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801A_Japanese.bin",
+                  "size": 502860,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenDM1801A_NMEA.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801A_NMEA.bin",
+                  "size": 502860,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenDM1801A_NMEA_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenDM1801A_NMEA_Japanese.bin",
+                  "size": 502860,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20231231/firmware/OpenGD77.bin",
+                  "size": 502868,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenGD77_Japanese.bin",
+                  "size": 502868,
+                  "variantDisplay": "Japanese"
+                },
+                "NMEA": {
+                  "filename": "OpenGD77_NMEA.bin",
+                  "path": "MK22/R20231231/firmware/OpenGD77_NMEA.bin",
+                  "size": 502868,
+                  "variantDisplay": "NMEA (GPS)"
+                },
+                "NMEA_Japanese": {
+                  "filename": "OpenGD77_NMEA_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenGD77_NMEA_Japanese.bin",
+                  "size": 502868,
+                  "variantDisplay": "NMEA (GPS) - Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20231231/firmware/OpenGD77S.bin",
+                  "size": 494808,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20231231/firmware/OpenRD5R.bin",
+                  "size": 502860,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_Japanese.bin",
+                  "path": "MK22/R20231231/firmware/OpenRD5R_Japanese.bin",
+                  "size": 502860,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MK22/R20231231/firmware"
+        },
+        "R20230304": {
+          "display": "2023-03-04",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20230304/firmware/OpenDM1801.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_JA.bin",
+                  "path": "MK22/R20230304/firmware/OpenDM1801_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20230304/firmware/OpenDM1801A.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_JA.bin",
+                  "path": "MK22/R20230304/firmware/OpenDM1801A_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20230304/firmware/OpenGD77.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_JA.bin",
+                  "path": "MK22/R20230304/firmware/OpenGD77_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20230304/firmware/OpenGD77S.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20230304/firmware/OpenRD5R.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_JA.bin",
+                  "path": "MK22/R20230304/firmware/OpenRD5R_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": false,
+          "languagesPath": null
+        },
+        "R20220228": {
+          "display": "2022-02-28",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20220228/firmware/OpenDM1801.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_JA.bin",
+                  "path": "MK22/R20220228/firmware/OpenDM1801_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20220228/firmware/OpenDM1801A.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_JA.bin",
+                  "path": "MK22/R20220228/firmware/OpenDM1801A_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20220228/firmware/OpenGD77.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_JA.bin",
+                  "path": "MK22/R20220228/firmware/OpenGD77_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20220228/firmware/OpenGD77S.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20220228/firmware/OpenRD5R.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_JA.bin",
+                  "path": "MK22/R20220228/firmware/OpenRD5R_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": false,
+          "languagesPath": null
+        },
+        "R20210711": {
+          "display": "2021-07-11",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20210711/firmware/OpenDM1801.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_JA.bin",
+                  "path": "MK22/R20210711/firmware/OpenDM1801_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenDM1801A": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801A.bin",
+                  "path": "MK22/R20210711/firmware/OpenDM1801A.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801A_JA.bin",
+                  "path": "MK22/R20210711/firmware/OpenDM1801A_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20210711/firmware/OpenGD77.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20210711/firmware/OpenGD77S.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77S_JA.bin",
+                  "path": "MK22/R20210711/firmware/OpenGD77S_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20210711/firmware/OpenRD5R.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_JA.bin",
+                  "path": "MK22/R20210711/firmware/OpenRD5R_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": false,
+          "languagesPath": null
+        },
+        "R20210529": {
+          "display": "2021-05-29",
+          "models": {
+            "OpenDM1801": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1801.bin",
+                  "path": "MK22/R20210529/firmware/OpenDM1801.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1801_JA.bin",
+                  "path": "MK22/R20210529/firmware/OpenDM1801_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77.bin",
+                  "path": "MK22/R20210529/firmware/OpenGD77.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77_JA.bin",
+                  "path": "MK22/R20210529/firmware/OpenGD77_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenGD77S": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77S.bin",
+                  "path": "MK22/R20210529/firmware/OpenGD77S.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenGD77S_JA.bin",
+                  "path": "MK22/R20210529/firmware/OpenGD77S_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenRD5R": {
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRD5R.bin",
+                  "path": "MK22/R20210529/firmware/OpenRD5R.bin",
+                  "size": 491664,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRD5R_JA.bin",
+                  "path": "MK22/R20210529/firmware/OpenRD5R_JA.bin",
+                  "size": 491664,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": false,
+          "languagesPath": null
+        }
+      }
+    },
+    "MDUV380_DM1701": {
+      "displayName": "MD-UV380 / DM-1701 / RT-84",
+      "description": "TYT MD-UV380, Baofeng DM-1701, Retevis RT-84",
+      "chipType": "STM32",
+      "cipherType": "MDUV380",
+      "firmwareExtension": ".bin",
+      "requiresDonor": true,
+      "models": {
+        "OpenMDUV380": "MD-UV380",
+        "OpenMDUV380_10W_PLUS": "MD-UV380 (10W Plus)",
+        "OpenDM1701": "DM-1701",
+        "OpenRT84": "RT-84"
+      },
+      "versions": {
+        "R20260131": {
+          "display": "2026-01-31",
+          "models": {
+            "OpenDM1701": {
+              "displayName": "DM-1701",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1701.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenDM1701.bin",
+                  "size": 804200,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1701_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenDM1701_Japanese.bin",
+                  "size": 806760,
+                  "variantDisplay": "Japanese"
+                }
+              },
+              "cipherType": "DM1701"
+            },
+            "OpenMDUV380": {
+              "displayName": "MD-UV380",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMDUV380.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenMDUV380.bin",
+                  "size": 806800,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMDUV380_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenMDUV380_Japanese.bin",
+                  "size": 806800,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenMDUV380_10W_PLUS": {
+              "displayName": "MD-UV380 (10W Plus)",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMDUV380_10W_PLUS.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenMDUV380_10W_PLUS.bin",
+                  "size": 806760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMDUV380_10W_PLUS_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenMDUV380_10W_PLUS_Japanese.bin",
+                  "size": 806760,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenRT84": {
+              "displayName": "RT-84",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRT84.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenRT84.bin",
+                  "size": 806760,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRT84_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20260131/firmware/OpenRT84_Japanese.bin",
+                  "size": 806760,
+                  "variantDisplay": "Japanese"
+                }
+              },
+              "cipherType": "DM1701"
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MDUV380_DM1701/R20260131/firmware"
+        },
+        "R20240908": {
+          "display": "2024-09-08",
+          "models": {
+            "OpenDM1701": {
+              "displayName": "DM-1701",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1701.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenDM1701.bin",
+                  "size": 803996,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1701_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenDM1701_Japanese.bin",
+                  "size": 806556,
+                  "variantDisplay": "Japanese"
+                }
+              },
+              "cipherType": "DM1701"
+            },
+            "OpenMDUV380": {
+              "displayName": "MD-UV380",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMDUV380.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenMDUV380.bin",
+                  "size": 806596,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMDUV380_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenMDUV380_Japanese.bin",
+                  "size": 806596,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenMDUV380_10W_PLUS": {
+              "displayName": "MD-UV380 (10W Plus)",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMDUV380_10W_PLUS.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenMDUV380_10W_PLUS.bin",
+                  "size": 806556,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMDUV380_10W_PLUS_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenMDUV380_10W_PLUS_Japanese.bin",
+                  "size": 806556,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "OpenRT84": {
+              "displayName": "RT-84",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenRT84.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenRT84.bin",
+                  "size": 806556,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenRT84_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20240908/firmware/OpenRT84_Japanese.bin",
+                  "size": 806556,
+                  "variantDisplay": "Japanese"
+                }
+              },
+              "cipherType": "DM1701"
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MDUV380_DM1701/R20240908/firmware"
+        },
+        "R20231231": {
+          "display": "2023-12-31",
+          "models": {
+            "OpenDM1701": {
+              "displayName": "DM-1701",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenDM1701.bin",
+                  "path": "MDUV380_DM1701/R20231231/firmware/OpenDM1701.bin",
+                  "size": 806524,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenDM1701_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20231231/firmware/OpenDM1701_Japanese.bin",
+                  "size": 806524,
+                  "variantDisplay": "Japanese"
+                }
+              },
+              "cipherType": "DM1701"
+            },
+            "OpenMDUV380": {
+              "displayName": "MD-UV380",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMDUV380.bin",
+                  "path": "MDUV380_DM1701/R20231231/firmware/OpenMDUV380.bin",
+                  "size": 806524,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMDUV380_Japanese.bin",
+                  "path": "MDUV380_DM1701/R20231231/firmware/OpenMDUV380_Japanese.bin",
+                  "size": 806524,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MDUV380_DM1701/R20231231/firmware"
+        }
+      }
+    },
+    "MD9600": {
+      "displayName": "MD-9600",
+      "description": "TYT MD-9600 Mobile Radio",
+      "chipType": "STM32",
+      "cipherType": "MD9600",
+      "firmwareExtension": ".bin",
+      "requiresDonor": true,
+      "hasHardwareVersions": true,
+      "models": {
+        "MD9600_V1": "MD-9600 (Hardware V1)",
+        "MD9600_V2": "MD-9600 (Hardware V2)",
+        "MD9600_V4": "MD-9600 (Hardware V4)",
+        "MD9600_V5": "MD-9600 (Hardware V5)"
+      },
+      "versions": {
+        "R20260131": {
+          "display": "2026-01-31",
+          "models": {
+            "MD9600_V1": {
+              "displayName": "MD-9600 (Hardware V1)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V1HW.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V1HW.bin",
+                  "size": 767536,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V1HW_Japanese.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V1HW_Japanese.bin",
+                  "size": 767536,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V2": {
+              "displayName": "MD-9600 (Hardware V2)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V2HW.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V2HW.bin",
+                  "size": 767536,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V2HW_Japanese.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V2HW_Japanese.bin",
+                  "size": 767536,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V4": {
+              "displayName": "MD-9600 (Hardware V4)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V4HW.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V4HW.bin",
+                  "size": 767536,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V4HW_Japanese.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V4HW_Japanese.bin",
+                  "size": 767536,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V5": {
+              "displayName": "MD-9600 (Hardware V5)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V5HW.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V5HW.bin",
+                  "size": 767536,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V5HW_Japanese.bin",
+                  "path": "MD9600/R20260131/firmware/MD9600_firmware_V5HW_Japanese.bin",
+                  "size": 767536,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MD9600/R20260131/firmware"
+        },
+        "R20240908": {
+          "display": "2024-09-08",
+          "models": {
+            "MD9600_V1": {
+              "displayName": "MD-9600 (Hardware V1)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V1HW.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V1HW.bin",
+                  "size": 767332,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V1HW_Japanese.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V1HW_Japanese.bin",
+                  "size": 767332,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V2": {
+              "displayName": "MD-9600 (Hardware V2)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V2HW.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V2HW.bin",
+                  "size": 767332,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V2HW_Japanese.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V2HW_Japanese.bin",
+                  "size": 767332,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V4": {
+              "displayName": "MD-9600 (Hardware V4)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V4HW.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V4HW.bin",
+                  "size": 767332,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V4HW_Japanese.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V4HW_Japanese.bin",
+                  "size": 767332,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V5": {
+              "displayName": "MD-9600 (Hardware V5)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V5HW.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V5HW.bin",
+                  "size": 767332,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V5HW_Japanese.bin",
+                  "path": "MD9600/R20240908/firmware/MD9600_firmware_V5HW_Japanese.bin",
+                  "size": 767332,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MD9600/R20240908/firmware"
+        },
+        "R20231231": {
+          "display": "2023-12-31",
+          "models": {
+            "MD9600_V1": {
+              "displayName": "MD-9600 (Hardware V1)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V1HW.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V1HW.bin",
+                  "size": 767316,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V1HW_Japanese.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V1HW_Japanese.bin",
+                  "size": 767316,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V2": {
+              "displayName": "MD-9600 (Hardware V2)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V2HW.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V2HW.bin",
+                  "size": 767316,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V2HW_Japanese.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V2HW_Japanese.bin",
+                  "size": 767316,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V4": {
+              "displayName": "MD-9600 (Hardware V4)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V4HW.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V4HW.bin",
+                  "size": 767316,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V4HW_Japanese.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V4HW_Japanese.bin",
+                  "size": 767316,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            },
+            "MD9600_V5": {
+              "displayName": "MD-9600 (Hardware V5)",
+              "variants": {
+                "Standard": {
+                  "filename": "MD9600_firmware_V5HW.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V5HW.bin",
+                  "size": 767316,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "MD9600_firmware_V5HW_Japanese.bin",
+                  "path": "MD9600/R20231231/firmware/MD9600_firmware_V5HW_Japanese.bin",
+                  "size": 767316,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MD9600/R20231231/firmware"
+        }
+      }
+    },
+    "MD2017": {
+      "displayName": "MD-2017",
+      "description": "TYT MD-2017 Dual Band Radio",
+      "chipType": "STM32",
+      "cipherType": "MDUV380",
+      "firmwareExtension": ".bin",
+      "requiresDonor": true,
+      "models": {
+        "OpenMD2017": "MD-2017"
+      },
+      "versions": {
+        "R20260131": {
+          "display": "2026-01-31",
+          "models": {
+            "OpenMD2017": {
+              "displayName": "MD-2017",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMD2017.bin",
+                  "path": "MD2017/R20260131/firmware/OpenMD2017.bin",
+                  "size": 806776,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMD2017_Japanese.bin",
+                  "path": "MD2017/R20260131/firmware/OpenMD2017_Japanese.bin",
+                  "size": 806796,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MD2017/R20260131/firmware"
+        },
+        "R20240908": {
+          "display": "2024-09-08",
+          "models": {
+            "OpenMD2017": {
+              "displayName": "MD-2017",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenMD2017.bin",
+                  "path": "MD2017/R20240908/firmware/OpenMD2017.bin",
+                  "size": 806596,
+                  "variantDisplay": "Standard (English)"
+                },
+                "Japanese": {
+                  "filename": "OpenMD2017_Japanese.bin",
+                  "path": "MD2017/R20240908/firmware/OpenMD2017_Japanese.bin",
+                  "size": 806596,
+                  "variantDisplay": "Japanese"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "MD2017/R20240908/firmware"
+        }
+      }
+    },
+    "DM32": {
+      "displayName": "DM32 / UV008",
+      "description": "Baofeng DM-32 / UV008 (C7000)",
+      "chipType": "DM32",
+      "firmwareExtension": ".bin",
+      "requiresDonor": false,
+      "models": {
+        "OpenDM32": "DM-32 / UV008"
+      },
+      "versions": {
+        "R20260711": {
+          "display": "2026-07-11",
+          "models": {
+            "OpenDM32": {
+              "displayName": "DM-32 / UV008",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77_DM32_20260711.bin",
+                  "path": "DM32/R20260711/firmware/OpenGD77_DM32_20260711.bin",
+                  "size": 830842,
+                  "variantDisplay": "Standard (English + Russian)"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "DM32/R20260711/firmware"
+        },
+        "R20260704": {
+          "display": "2026-07-04",
+          "models": {
+            "OpenDM32": {
+              "displayName": "DM-32 / UV008",
+              "variants": {
+                "Standard": {
+                  "filename": "OpenGD77_DM32_20260704.bin",
+                  "path": "DM32/R20260704/firmware/OpenGD77_DM32_20260704.bin",
+                  "size": 830842,
+                  "variantDisplay": "Standard (English)"
+                }
+              }
+            }
+          },
+          "hasLanguages": true,
+          "languagesPath": "DM32/R20260704/firmware"
+        }
+      }
+    }
+  }
+}

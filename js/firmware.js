@@ -294,7 +294,7 @@ const FirmwareManager = {
     if (progressText) progressText.textContent = 'Downloading firmware...';
 
     try {
-      const response = await fetch(`/opengd77/dl/${info.path}`);
+      const response = await fetch(`/dl/${info.path}`);
       if (!response.ok) throw new Error('Failed to download firmware');
       const data = new Uint8Array(await response.arrayBuffer());
 
@@ -307,7 +307,7 @@ const FirmwareManager = {
         if (langInfo?.file) {
           if (progressText) progressText.textContent = 'Downloading language file...';
           try {
-            const langUrl = `/opengd77/dl/${versionData.languagesPath}/${langInfo.file}`;
+            const langUrl = `/dl/${versionData.languagesPath}/${langInfo.file}`;
             const langResponse = await fetch(langUrl);
             if (langResponse.ok) {
               const languageData = new Uint8Array(await langResponse.arrayBuffer());

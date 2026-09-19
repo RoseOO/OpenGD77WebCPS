@@ -45,9 +45,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src-elem 'self' https://cdn.jsdelivr.net; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https://api-beta.rsgb.online https://api.brandmeister.network https://celestrak.org https://raw.githubusercontent.com https://cdn.jsdelivr.net; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Theme (set before paint to avoid a flash) -->
-  <script src="js/theme-init.js?v=44"></script>
+  <script src="js/theme-init.js?v=80"></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=44">
+  <link rel="stylesheet" href="css/styles.css?v=80">
 </head>
 <body>
   <noscript>
@@ -281,6 +281,14 @@
             <a class="nav-item" data-section="radio-tools">
               <i class="mdi mdi-tools"></i>
               <span>Radio Tools</span>
+            </a>
+            <a class="nav-item" data-section="radio-settings">
+              <i class="mdi mdi-tune-variant"></i>
+              <span>Radio Preferences</span>
+            </a>
+            <a class="nav-item" data-section="clone-radio">
+              <i class="mdi mdi-content-duplicate"></i>
+              <span>Clone Radio</span>
             </a>
           </div>
           
@@ -541,6 +549,13 @@
                 <i class="mdi mdi-folder-outline"></i>
                 Group by Zone
               </button>
+              <div class="column-picker" id="channelColumnsPicker">
+                <button class="btn btn-secondary" id="channelColumnsBtn" title="Choose which columns to show">
+                  <i class="mdi mdi-view-column"></i>
+                  Columns
+                </button>
+                <div class="column-picker-menu" id="channelColumnsMenu"></div>
+              </div>
               <button class="btn btn-secondary" id="importChannelsBtn">
                 <i class="mdi mdi-import"></i>
                 Import
@@ -566,10 +581,11 @@
                   <th>RX Freq</th>
                   <th>TX Freq</th>
                   <th>CC/Tone</th>
-                  <th>TS</th>
-                  <th>Contact</th>
-                  <th>Power</th>
-                  <th>Actions</th>
+                <th>TS</th>
+                <th>Contact</th>
+                <th>TG List</th>
+                <th>Power</th>
+                <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="channelsTableBody">
@@ -1320,6 +1336,22 @@
             </div>
           </div>
           
+          <div class="repeater-filters">
+            <div class="filter-group">
+              <label class="form-label">Region</label>
+              <select class="form-select" id="aprsRegionSelect"></select>
+            </div>
+            <div class="filter-group">
+              <label class="form-label">Path</label>
+              <select class="form-select" id="aprsPathPreset" title="APRS digipeater path"></select>
+            </div>
+            <button class="btn btn-secondary" id="addDefaultAprsBtn">
+              <i class="mdi mdi-map-marker-path"></i>
+              Add Regional Default
+            </button>
+            <small id="aprsRegionHint" style="margin-left: auto; color: var(--text-secondary); font-size: 0.8rem;"></small>
+          </div>
+          
           <div class="data-table-container">
             <table class="data-table" id="aprsTable">
               <thead>
@@ -1329,6 +1361,7 @@
                   <th>Via Path</th>
                   <th>Icon</th>
                   <th>Comment</th>
+                  <th>TX (QSY)</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1487,6 +1520,11 @@
               <i class="mdi mdi-file-export"></i>
               Export CSV
             </button>
+            <button class="btn btn-danger" id="clearSatellitesBtn">
+              <i class="mdi mdi-delete-sweep"></i>
+              Clear All
+            </button>
+            <span id="satelliteCount" style="margin-left: auto; font-size: 0.85rem; color: var(--text-secondary);"></span>
           </div>
           
           <div class="data-table-container">
@@ -1495,14 +1533,15 @@
                 <tr>
                   <th>Cat #</th>
                   <th>Name</th>
-                  <th>RX1 (MHz)</th>
-                  <th>TX1 (MHz)</th>
+                  <th>RX1 Voice</th>
+                  <th>TX1 Voice</th>
                   <th>CTCSS</th>
-                  <th>Arm CTCSS</th>
-                  <th>RX2 (MHz)</th>
-                  <th>TX2 (MHz)</th>
-                  <th>RX3 (MHz)</th>
-                  <th>APRS</th>
+                  <th>Arm</th>
+                  <th>RX2 APRS</th>
+                  <th>TX2 APRS</th>
+                  <th>RX3 CW</th>
+                  <th>TX3</th>
+                  <th>APRS Path</th>
                   <th>TLE</th>
                   <th>Actions</th>
                 </tr>
@@ -2773,6 +2812,111 @@
           </div>
         </section>
         
+        <!-- Radio Preferences Section -->
+        <section class="content-section" id="section-radio-settings">
+          <div class="section-header">
+            <h1>Radio Preferences</h1>
+            <div class="section-actions">
+              <button class="btn btn-secondary" id="readRadioSettingsBtn">
+                <i class="mdi mdi-download"></i> Read from Radio
+              </button>
+              <button class="btn btn-primary" id="writeRadioSettingsBtn">
+                <i class="mdi mdi-upload"></i> Write to Radio
+              </button>
+            </div>
+          </div>
+          
+          <div class="settings-form settings-form-wide">
+            <p class="form-help" style="margin-bottom: 1rem;">
+              Settings menu preferences stored on the radio (display, sound, radio options,
+              general flags). Read them from a connected radio to edit, or leave unread to
+              keep the radio's existing preferences. These are saved in your JSON codeplug
+              and local library, but are not part of exported <code>.g77</code> files.
+            </p>
+            <div id="radioSettingsStatus" class="form-help" style="margin-bottom: 1rem;"></div>
+            <div id="radioSettingsForm"></div>
+          </div>
+        </section>
+        
+        <!-- Clone Radio Section -->
+        <section class="content-section" id="section-clone-radio">
+          <div class="section-header">
+            <h1>Clone Radio</h1>
+          </div>
+          
+          <div class="settings-form settings-form-wide">
+            <p class="portrait-hide" style="margin-bottom: 0.75rem;">
+              Write the codeplug currently loaded in this app (opened from a file or local
+              library, or read from a radio) to the connected radio, with a new callsign and DMR
+              ID. This is the bulk-programming flow: load once, then write to as many radios as you
+              need. Optionally include the radio's Settings preferences and display theme - those
+              are captured from a radio when you click <em>Read Source</em> first. Cloning between
+              different models is supported (preferences are translated). Calibration data is
+              never copied.
+            </p>
+            <ol class="form-help portrait-hide" style="margin: 0 0 1rem 1.2rem; line-height: 1.6;">
+              <li>Load a codeplug (file / local library) - or click <em>Read Source</em> to also capture a radio's preferences and theme.</li>
+              <li>Enter the new callsign / DMR ID for this target radio.</li>
+              <li>Click <em>Write to this Radio</em>, then repeat steps 2-3 for each radio.</li>
+            </ol>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Target callsign</label>
+                <input type="text" class="form-input" id="cloneCallsign" maxlength="8" autocomplete="off" placeholder="e.g. M0ABC">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Target DMR ID</label>
+                <input type="text" class="form-input" id="cloneDmrId" maxlength="8" inputmode="numeric" autocomplete="off" placeholder="e.g. 2345678">
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label class="form-label" style="display:flex;align-items:center;gap:0.5rem;">
+                <input type="checkbox" id="clonePreferences">
+                Also clone radio preferences
+              </label>
+              <div class="form-help" style="margin-left: 1.5rem;">
+                Reads the source radio's Settings preferences and writes them to the target
+                along with the codeplug.
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label class="form-label" style="display:flex;align-items:center;gap:0.5rem;">
+                <input type="checkbox" id="cloneTheme">
+                Also clone the display theme
+              </label>
+              <div class="form-help" style="margin-left: 1.5rem;">
+                Writes the theme read from a radio, or the theme selected/edited in the Theme
+                Editor if it differs from the default.
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label class="form-label" style="display:flex;align-items:center;gap:0.5rem;">
+                <input type="checkbox" id="cloneBoot">
+                Also clone the custom boot screen (image + melody)
+              </label>
+              <div class="form-help" style="margin-left: 1.5rem;">
+                Copies the custom boot image and boot melody. Boot text and the power-on password
+                are part of the codeplug and are always copied.
+              </div>
+            </div>
+            
+            <div class="form-row" style="gap: 0.5rem; align-items: center;">
+              <button class="btn btn-secondary" id="cloneReadBtn" title="Optional: capture this radio's preferences and theme">
+                <i class="mdi mdi-download"></i> Read Source (optional)
+              </button>
+              <button class="btn btn-primary" id="cloneWriteBtn">
+                <i class="mdi mdi-upload"></i> Write to this Radio
+              </button>
+            </div>
+            <div id="cloneStatus" class="form-help" style="margin-top: 1rem;"></div>
+            <div id="clonePreview" class="clone-preview" style="display:none; margin-top:1rem;"></div>
+          </div>
+        </section>
+        
         <!-- Firmware Update Section -->
         <section class="content-section" id="section-firmware">
           <div class="section-header">
@@ -3310,11 +3454,15 @@
                 </div>
                 <div class="highlight-item">
                   <i class="mdi mdi-check-circle"></i>
-                  <span>Supports MK22 radios (GD-77, DM-1801, RD-5R) and STM32 radios (MD-UV380, MD-9600)</span>
+                  <span>Supports MK22 radios (GD-77, DM-1801, RD-5R), STM32 radios (MD-UV380, MD-9600, MD-2017, DM-1701), and the DM-32 / UV008 (Web Serial)</span>
                 </div>
                 <div class="highlight-item">
                   <i class="mdi mdi-check-circle"></i>
-                  <span>Save your codeplugs to the local library on this device</span>
+                  <span>Save and share your codeplugs with the community</span>
+                </div>
+                <div class="highlight-item">
+                  <i class="mdi mdi-check-circle"></i>
+                  <span>Satellites, repeaters, DMR ID database, APRS and more built in</span>
                 </div>
               </div>
             </div>
@@ -3359,6 +3507,66 @@
                   <i class="mdi mdi-wrench"></i>
                   <span>Troubleshooting</span>
                 </a>
+                <a href="#cps-vfo" class="toc-item">
+                  <i class="mdi mdi-tune-vertical"></i>
+                  <span>VFO A/B</span>
+                </a>
+                <a href="#cps-aprs" class="toc-item">
+                  <i class="mdi mdi-map-marker-path"></i>
+                  <span>APRS</span>
+                </a>
+                <a href="#cps-general-settings" class="toc-item">
+                  <i class="mdi mdi-cog"></i>
+                  <span>General Settings</span>
+                </a>
+                <a href="#cps-boot-settings" class="toc-item">
+                  <i class="mdi mdi-monitor-screenshot"></i>
+                  <span>Boot Settings</span>
+                </a>
+                <a href="#cps-themes" class="toc-item">
+                  <i class="mdi mdi-palette"></i>
+                  <span>Theme Editor</span>
+                </a>
+                <a href="#cps-quick-reference" class="toc-item">
+                  <i class="mdi mdi-flash"></i>
+                  <span>Quick Reference</span>
+                </a>
+                <a href="#cps-satellites" class="toc-item">
+                  <i class="mdi mdi-satellite-variant"></i>
+                  <span>Satellites</span>
+                </a>
+                <a href="#cps-repeaters" class="toc-item">
+                  <i class="mdi mdi-radio-tower"></i>
+                  <span>Repeaters &amp; Map</span>
+                </a>
+                <a href="#cps-dmrid" class="toc-item">
+                  <i class="mdi mdi-account-group"></i>
+                  <span>DMR ID Database</span>
+                </a>
+                <a href="#cps-tglists" class="toc-item">
+                  <i class="mdi mdi-format-list-group"></i>
+                  <span>Talk Groups</span>
+                </a>
+                <a href="#cps-scan-lists" class="toc-item">
+                  <i class="mdi mdi-playlist-play"></i>
+                  <span>Scan Lists</span>
+                </a>
+                <a href="#cps-dtmf" class="toc-item">
+                  <i class="mdi mdi-dialpad"></i>
+                  <span>DTMF</span>
+                </a>
+                <a href="#cps-my-codeplugs" class="toc-item">
+                  <i class="mdi mdi-folder-multiple"></i>
+                  <span>My Codeplugs</span>
+                </a>
+                <a href="#cps-band-limits" class="toc-item">
+                  <i class="mdi mdi-signal-variant"></i>
+                  <span>Band Limits</span>
+                </a>
+                <a href="#cps-radio-tools" class="toc-item">
+                  <i class="mdi mdi-tools"></i>
+                  <span>Radio Tools</span>
+                </a>
               </div>
             </div>
 
@@ -3393,7 +3601,7 @@
                   <div class="requirement-icon"><i class="mdi mdi-microsoft-windows"></i></div>
                   <div class="requirement-text">
                     <strong>WinUSB Driver (Windows Only)</strong>
-                    <span>Windows users need to install a special driver. See the <a href="#" data-section="usb-help">USB Setup</a> guide for instructions.</span>
+                    <span>Windows users of MK22/STM32 radios need a special driver. The DM-32 / UV008 uses a standard USB serial port and needs no driver. See the <a href="#" data-section="usb-help">USB Setup</a> guide for instructions.</span>
                   </div>
                 </div>
               </div>
@@ -3411,8 +3619,9 @@
                     <strong>Select Your Radio Type</strong>
                     <p>Use the dropdown at the top of the screen to choose your radio type:</p>
                     <ul>
-                      <li><strong>MK22</strong> - For GD-77, DM-1801, and RD-5R radios</li>
-                      <li><strong>STM32</strong> - For MD-UV380, MD-9600, and similar radios</li>
+                      <li><strong>MK22</strong> - For GD-77, DM-1801, and RD-5R radios (WebUSB)</li>
+                      <li><strong>STM32</strong> - For MD-UV380, MD-9600, MD-2017, and DM-1701 radios (WebUSB)</li>
+                      <li><strong>DM32 / UV008</strong> - For the Baofeng DM-32 / UV008 (Web Serial, no driver needed)</li>
                     </ul>
                   </div>
                 </div>
@@ -3437,7 +3646,7 @@
                   <div class="step-number">4</div>
                   <div class="step-content">
                     <strong>Select Your Device</strong>
-                    <p>A popup will appear showing available USB devices. Select your radio from the list and click <strong>Connect</strong>.</p>
+                    <p>A popup will appear - select your radio from the USB device list (WebUSB radios) or the serial port list (DM-32 / UV008), then click <strong>Connect</strong>.</p>
                   </div>
                 </div>
                 
@@ -3751,11 +3960,12 @@
               <h3>Setting Up APRS</h3>
               <ol>
                 <li>Go to the <strong>APRS</strong> section in the sidebar</li>
-                <li>Enable APRS and enter your callsign with SSID (e.g., M0ABC-7)</li>
-                <li>Set your symbol (usually a handheld radio icon for portable operation)</li>
-                <li>Configure the beacon interval (how often your position is sent)</li>
-                <li>Optionally add a status text</li>
+                <li>Use <strong>Add Regional Default</strong> to create a starter config for your region and digipeater path (WIDE1-1/WIDE2-1, NOGATE, RFONLY or DIRECT)</li>
+                <li>Or click <strong>Add Config</strong> and set the name, Tx SSID, symbol, via path and comment</li>
+                <li>Set <strong>TX Frequency (QSY)</strong> to the APRS channel (e.g. 144.800 in Europe) and tick <strong>Transmit QSY</strong></li>
+                <li>For a fixed position tick <strong>Use Fixed Position</strong> and enter Latitude/Longitude</li>
               </ol>
+              <p>An APRS config is assigned to a channel or VFO using its <strong>APRS</strong> dropdown. Satellite APRS (ISS, SONATE-2) is set up in the <strong>Satellites</strong> section.</p>
               
               <h3>Common SSID Numbers</h3>
               <ul>
@@ -3818,6 +4028,93 @@
               <p>The Theme Editor includes several pre-made themes you can apply with one click. Choose from dark, light, colorful, and retro styles.</p>
             </div>
 
+            <!-- Satellites -->
+            <div class="help-card" id="cps-satellites">
+              <h2><i class="mdi mdi-satellite-variant"></i> Satellites</h2>
+              <p>Program and track amateur radio satellites. Each entry stores voice (RX1/TX1), APRS (RX2/TX2) and CW (RX3) frequencies plus TLE orbital data.</p>
+              <h3>Managing Satellites</h3>
+              <ul>
+                <li><strong>Load Defaults</strong> - choose from a list of common satellites to add (existing ones are skipped, up to 25)</li>
+                <li><strong>Update TLEs</strong> - download current orbital data for accurate pass predictions</li>
+                <li><strong>Add Satellite</strong> - enter frequencies and catalogue number manually</li>
+                <li><strong>Clear All</strong> - remove every satellite (asks for confirmation)</li>
+              </ul>
+              <div class="help-tip">
+                <i class="mdi mdi-lightbulb"></i>
+                <div><strong>Tip:</strong> For APRS satellites such as ISS and SONATE-2 the editor suggests the correct digipeater path (ARISS / RS0ISS or DP0SNX) and can create the matching APRS config for you.</div>
+              </div>
+            </div>
+
+            <!-- Repeaters -->
+            <div class="help-card" id="cps-repeaters">
+              <h2><i class="mdi mdi-radio-tower"></i> Repeaters &amp; Map</h2>
+              <p>Search analogue and DMR repeaters from the worldwide database and import them straight into your codeplug.</p>
+              <ul>
+                <li>Filter by band, mode, network, country and status, and search by callsign or location</li>
+                <li>Click a repeater for details and import it, or select several and import them together</li>
+                <li>The <strong>Repeater Map</strong> plots matching repeaters - click a marker for details and import</li>
+              </ul>
+            </div>
+
+            <!-- DMR ID Database -->
+            <div class="help-card" id="cps-dmrid">
+              <h2><i class="mdi mdi-account-group"></i> DMR ID Database</h2>
+              <p>The DMR ID database resolves DMR IDs to callsigns so your radio shows names instead of numbers.</p>
+              <ul>
+                <li>Download the RadioID database from the <strong>DMR ID</strong> section</li>
+                <li>Select a region first if you only need a subset</li>
+                <li>Write the database to the radio afterwards</li>
+              </ul>
+            </div>
+
+            <!-- Talk Groups -->
+            <div class="help-card" id="cps-tglists">
+              <h2><i class="mdi mdi-format-list-group"></i> Talk Groups</h2>
+              <p>A talk group list groups the talkgroups used by a DMR channel.</p>
+              <ul>
+                <li>Create a list, add contacts/talkgroups to it, then assign it to a channel</li>
+                <li>On the radio, use the list to select a talkgroup for the channel</li>
+              </ul>
+            </div>
+
+            <!-- Scan Lists -->
+            <div class="help-card" id="cps-scan-lists">
+              <h2><i class="mdi mdi-playlist-play"></i> Scan Lists</h2>
+              <p>Scan lists define what the radio scans when you start a scan.</p>
+              <ul>
+                <li>Add channels or zones to a scan list</li>
+                <li>Assign the list to a channel, or select it on the radio</li>
+              </ul>
+            </div>
+
+            <!-- DTMF -->
+            <div class="help-card" id="cps-dtmf">
+              <h2><i class="mdi mdi-dialpad"></i> DTMF</h2>
+              <p>Create DTMF codes (0-9, A-D, * and #) that can be sent from the radio to control repeaters and other equipment.</p>
+            </div>
+
+            <!-- My Codeplugs -->
+            <div class="help-card" id="cps-my-codeplugs">
+              <h2><i class="mdi mdi-folder-multiple"></i> My Codeplugs</h2>
+              <p>Keep multiple codeplugs organised and reload them whenever you need.</p>
+              <ul>
+                <li>Save the current codeplug with a name and reload it later</li>
+                <li>Import or export codeplugs as files to back them up or share them</li>
+              </ul>
+            </div>
+
+            <!-- Band Limits -->
+            <div class="help-card" id="cps-band-limits">
+              <h2><i class="mdi mdi-signal-variant"></i> Band Limits</h2>
+              <p>Band limits restrict which frequencies the radio is allowed to transmit on, per band and per radio model.</p>
+            </div>
+
+            <!-- Radio Tools -->
+            <div class="help-card" id="cps-radio-tools">
+              <h2><i class="mdi mdi-tools"></i> Radio Tools</h2>
+              <p>Maintenance utilities for the connected radio, such as calibration and diagnostic actions.</p>
+            </div>
+
             <!-- Troubleshooting -->
             <div class="help-card help-card-info" id="cps-troubleshooting">
               <h2><i class="mdi mdi-wrench"></i> Troubleshooting</h2>
@@ -3832,7 +4129,7 @@
                   <ul class="troubleshoot-solutions">
                     <li>Make sure the radio is turned on</li>
                     <li>Try a different USB cable</li>
-                    <li>Windows users: Install the WinUSB driver (see <a href="#" data-section="usb-help">USB Setup</a>)</li>
+                    <li>Windows users of MK22/STM32 radios: install the WinUSB driver (not needed for the DM-32 / UV008 - see <a href="#" data-section="usb-help">USB Setup</a>)</li>
                     <li>Make sure you're using Chrome, Edge, or Brave browser</li>
                   </ul>
                 </div>
@@ -4222,26 +4519,28 @@ sudo udevadm trigger</code></pre>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   
   <!-- Dynamic cache-versioned scripts -->
-  <script src="js/config.js?v=44"></script>
-  <script src="js/utils.js?v=44"></script>
-  <script src="js/g77.js?v=44"></script>
-  <script src="js/theme.js?v=44"></script>
-  <script src="js/codeplug.js?v=44"></script>
-  <script src="js/mk22_cipher.js?v=44"></script>
-  <script src="js/stm32_ciphers.js?v=44"></script>
-  <script src="js/dm32microcode.js?v=44"></script>
-  <script src="js/dm32flash.js?v=44"></script>
-  <script src="js/webusb.js?v=44"></script>
-  <script src="js/api.js?v=44"></script>
-  <script src="js/firmware.js?v=44"></script>
-  <script src="js/ui.js?v=44"></script>
-  <script src="js/app.js?v=44"></script>
+  <script src="js/config.js?v=80"></script>
+  <script src="js/utils.js?v=80"></script>
+  <script src="js/settings.js?v=80"></script>
+  <script src="js/g77.js?v=80"></script>
+  <script src="js/theme.js?v=80"></script>
+  <script src="js/codeplug.js?v=80"></script>
+  <script src="js/mk22_cipher.js?v=80"></script>
+  <script src="js/stm32_ciphers.js?v=80"></script>
+  <script src="js/dm32microcode.js?v=80"></script>
+  <script src="js/dm32flash.js?v=80"></script>
+  <script src="js/webusb.js?v=80"></script>
+  <script src="js/api.js?v=80"></script>
+  <script src="js/firmware.js?v=80"></script>
+  <script src="js/ui.js?v=80"></script>
+  <script src="js/app.js?v=80"></script>
+  <script src="js/radio-settings-ui.js?v=80"></script>
   
   <!-- Service Worker Registration -->
-  <script src="js/sw-register.js?v=44"></script>
+  <script src="js/sw-register.js?v=80"></script>
   
   <!-- User Guide Loader -->
-  <script src="js/user-guide.js?v=44"></script>
+  <script src="js/user-guide.js?v=80"></script>
 
 </body>
 </html>

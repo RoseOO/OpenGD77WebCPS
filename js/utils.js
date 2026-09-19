@@ -35,7 +35,7 @@ const Utils = {
   /**
    * Show a toast notification
    */
-  toast(message, type = 'info', duration = 3000) {
+  toast(message, type = 'info', duration = 6000) {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -115,6 +115,66 @@ const Utils = {
       },
       reset() { start = null; }
     };
+  },
+
+  /**
+   * Canonical repeater network names. Networks in the feeds are very messy
+   * (BM/Braindmeister/BrandMeister, DMR+/DMR-plus/DMR Plus, IPSC2 FRANCE 3,
+   * comma/slash separated multi-network strings, etc.); everything is folded
+   * onto these names.
+   */
+  CANONICAL_NETWORKS: [
+    'BrandMeister', 'DMRplus', 'DMR-MARC', 'IPSC2', 'freeDMR', 'TGIF', 'ADN',
+    'IT-DMR', 'DV Scotland Phoenix', 'Yorkshire DMR', 'South West Cluster',
+    'XLX', 'TETRA', 'Fusion (C4FM)', 'D-STAR', 'P25', 'NXDN', 'M17',
+    'HBLink', 'VK-DMR', 'ZL-TRBO', 'Can-TRBO', 'Hytera', 'Motorola', 'DMR'
+  ],
+
+  /**
+   * Networks we ship talkgroup imports for. Pinned to the top of the Network
+   * filter, in this order, ahead of the other canonical networks.
+   */
+  PRIORITY_NETWORKS: [
+    'SystemX', 'TGIF', 'BrandMeister', 'DMRplus', 'freeDMR', 'ADN',
+    'DV Scotland Phoenix', 'QuadNet'
+  ],
+
+
+  /** Human-readable label for a country code (ISO2) or an already-named country. */
+  countryLabel(code) {
+    if (!code) return '';
+    const c = String(code).trim();
+    if (!/^[A-Za-z]{2}$/.test(c)) return c;
+    try {
+      const dn = new Intl.DisplayNames(['en'], { type: 'region' });
+      return dn.of(c.toUpperCase()) || c.toUpperCase();
+    } catch (e) {
+      return c.toUpperCase();
+    }
+  },
+
+  /** Classify an output frequency (MHz) into a ham band key. */
+  bandOfMhz(mhz) {
+    const f = parseFloat(mhz);
+    if (!f) return '';
+    if (f >= 28 && f < 30) return '10m';
+    if (f >= 50 && f < 54) return '6m';
+    if (f >= 144 && f < 148) return 'vhf';
+    if (f >= 430 && f < 450) return 'uhf';
+    if (f >= 1240 && f < 1300) return '23cm';
+    return '';
+  },
+
+  /** Primary mode of a canonical repeater record (DMR takes precedence). */
+  repeaterMode(rec) {
+    const modes = Array.isArray(rec?.modes) ? rec.modes.map(m => String(m).toUpperCase()) : [];
+    if (modes.includes('DMR')) return 'DMR';
+    if (modes.includes('FM') || modes.includes('NFM') || modes.includes('ANALOG')) return 'FM';
+    if (modes.includes('D-STAR') || modes.includes('DSTAR')) return 'D-STAR';
+    if (modes.includes('YSF') || modes.includes('FUSION')) return 'FUSION';
+    if (modes.includes('P25')) return 'P25';
+    if (modes.includes('NXDN')) return 'NXDN';
+    return modes[0] || 'FM';
   },
 
   /** Completeness/preference score for choosing between duplicate records. */
@@ -1360,7 +1420,17 @@ const Utils = {
      * Returns an object mapping NORAD catalogue numbers to TLE data
      */
     async fetchTLEs() {
-      return this.fetchTLEsFromUrl(CONFIG.TLE_API);
+      const primary = await this.fetchTLEsFromUrl(CONFIG.TLE_API);
+      if (!CONFIG.TLE_SUPPLEMENTAL) return primary;
+      try {
+        const supplemental = await this.fetchTLEsFromUrl(CONFIG.TLE_SUPPLEMENTAL);
+        // Primary (CelesTrak) wins on conflicts; the supplemental fills the gaps
+        // (e.g. IO-86, which CelesTrak's amateur group omits).
+        return { ...supplemental, ...primary };
+      } catch (error) {
+        console.warn('Supplemental TLE fetch failed:', error.message);
+        return primary;
+      }
     },
 
     /**

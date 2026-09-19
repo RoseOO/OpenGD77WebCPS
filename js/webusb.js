@@ -57,6 +57,19 @@ class OpenGD77USB {
     this._activeOp = null;
     // True when the user explicitly picked a radio type (respect it on detect).
     this._explicitRadioType = false;
+
+    // Persistent-permission reconnection. WebUSB/Web Serial grants stay valid
+    // for the origin, so a radio that reboots (and re-enumerates) can be
+    // re-acquired silently instead of showing the device chooser again.
+    this._rememberedUsb = null;      // {vendorId, productId, serialNumber, radioType}
+    this._rememberedHid = null;      // {vendorId, productId, productName, radioType}
+    this._rememberedSerial = null;   // {usbVendorId, usbProductId, radioType}
+    this._autoReconnecting = false;
+    this.autoReconnectEnabled = true;
+    // Incremented on every unexpected disconnect (i.e. a radio reboot). Callers
+    // waiting for a reboot watch this so they notice the dropout even when the
+    // radio re-enumerates faster than they poll.
+    this._disconnectCount = 0;
     
     // Communication buffer
     this.commsBuffer = new Uint8Array(128 * 1024);
@@ -139,6 +152,14 @@ class OpenGD77USB {
       navigator.usb.addEventListener('disconnect', (event) => {
         this.handleUSBDisconnect(event);
       });
+
+      // A rebooted radio re-enumerates and fires 'connect'; if we have already
+      // been authorised for it, silently re-open without the device chooser.
+      if (navigator.usb.addEventListener) {
+        navigator.usb.addEventListener('connect', (event) => {
+          this.handleUSBConnect(event);
+        });
+      }
     }
 
     // Listen for WebHID disconnect events (MK22 HID bootloader on Windows)
@@ -146,6 +167,11 @@ class OpenGD77USB {
       navigator.hid.addEventListener('disconnect', (event) => {
         this.handleHIDDisconnect(event);
       });
+      if (navigator.hid.addEventListener) {
+        navigator.hid.addEventListener('connect', (event) => {
+          this.handleHIDConnect(event);
+        });
+      }
     }
 
     // Listen for Web Serial disconnect events (DM-32 / UV-008, USB-serial adapters)
@@ -153,6 +179,9 @@ class OpenGD77USB {
       try {
         navigator.serial.addEventListener('disconnect', (event) => {
           this.handleSerialDisconnect(event);
+        });
+        navigator.serial.addEventListener('connect', (event) => {
+          this.handleSerialConnect(event);
         });
       } catch (e) { /* browser build without the serial disconnect event */ }
     }
@@ -184,6 +213,7 @@ class OpenGD77USB {
     // Check if the disconnected device is our connected device
     if (this.device && event.device === this.device) {
       console.log('USB device disconnected unexpectedly (radio may have rebooted)');
+      this._disconnectCount++;
       
       // Reset connection state without trying to close the device (it's already gone)
       this.device = null;
@@ -192,8 +222,283 @@ class OpenGD77USB {
       this.isInDFUMode = false;
       this.claimedInterfaces = [];
       this.controlInterfaceNumber = null;
-      this.updateStatus('disconnected', 'Radio disconnected - please reconnect');
+      this.updateStatus('disconnected', 'Radio disconnected - waiting to reconnect…');
     }
+  }
+
+  /**
+   * Handle a USB 'connect' event (radio rebooted or was replugged). Because the
+   * origin keeps the device permission, we can re-open the already-authorised
+   * device without showing the chooser again.
+   */
+  async handleUSBConnect(event) {
+    if (!this.autoReconnectEnabled) return;
+    if (this.connected || this._busy || this._activeOp || this._autoReconnecting) return;
+    if (!this._matchesRememberedUsb(event.device)) return;
+    this.debugMessage('USB device reconnected - attempting silent reconnect');
+    await this._autoReconnect(event.device);
+  }
+
+  /**
+   * Open a previously-authorised device without the chooser, retrying briefly
+   * while the radio finishes enumerating its CDC interface.
+   */
+  async _autoReconnect(device) {
+    if (this._autoReconnecting) return false;
+    this._autoReconnecting = true;
+    try {
+      let lastError = null;
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          await this.connect(device);
+          this.updateStatus('connected', `Reconnected: ${this.radioModel || this.radioType}`);
+          if (typeof Utils !== 'undefined' && Utils.toast) Utils.toast('Radio reconnected', 'success');
+          return true;
+        } catch (e) {
+          lastError = e;
+          this.debugMessage(`Auto-reconnect attempt ${attempt}/5 failed: ${e.message}`);
+          await this.delay(400);
+        }
+      }
+      this.updateStatus('disconnected', 'Radio disconnected - click Connect to retry');
+      if (lastError) this.debugMessage(`Auto-reconnect gave up: ${lastError.message}`);
+      return false;
+    } finally {
+      this._autoReconnecting = false;
+    }
+  }
+
+  /**
+   * Remember the authorised device so it can be matched after a reboot. The
+   * descriptor is also persisted so a page reload can re-acquire the device.
+   */
+  _rememberDevice() {
+    try {
+      if (!this.device) return;
+      const info = {
+        vendorId: this.device.vendorId,
+        productId: this.device.productId,
+        serialNumber: this.device.serialNumber || null,
+        radioType: this.radioType
+      };
+      this._rememberedUsb = info;
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        Utils.storage.set(CONFIG.STORAGE.USB_DEVICE, info);
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  _rememberedUsbInfo() {
+    if (this._rememberedUsb) return this._rememberedUsb;
+    try {
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        this._rememberedUsb = Utils.storage.get(CONFIG.STORAGE.USB_DEVICE) || null;
+      }
+    } catch (e) { /* ignore */ }
+    return this._rememberedUsb;
+  }
+
+  _matchesRememberedUsb(device) {
+    const info = this._rememberedUsbInfo();
+    if (!info || !device) return false;
+    if (device.vendorId !== info.vendorId || device.productId !== info.productId) return false;
+    if (info.serialNumber && device.serialNumber && info.serialNumber !== device.serialNumber) return false;
+    return true;
+  }
+
+  /**
+   * Try to re-acquire a previously-authorised radio without prompting. Tries
+   * WebUSB, then WebHID, then Web Serial. Returns true when reconnected. Call
+   * this on page load to transparently resume a session.
+   */
+  async tryReconnect() {
+    if (this.connected) return true;
+    if (await this._tryReconnectUsb()) return true;
+    if (await this._tryReconnectHid()) return true;
+    if (await this._tryReconnectSerial()) return true;
+    return false;
+  }
+
+  async _tryReconnectUsb() {
+    const info = this._rememberedUsbInfo();
+    if (!info) return false;
+    if (typeof navigator === 'undefined' || !navigator.usb || !navigator.usb.getDevices) return false;
+    try {
+      const devices = await navigator.usb.getDevices();
+      const match = devices.find(d => this._matchesRememberedUsb(d));
+      if (!match) return false;
+      this.debugMessage('tryReconnect: found authorised USB device, reconnecting silently');
+      return await this._autoReconnect(match);
+    } catch (e) {
+      this.debugMessage(`USB reconnect failed: ${e.message}`);
+      return false;
+    }
+  }
+
+  async _tryReconnectHid() {
+    const info = this._rememberedHidInfo();
+    if (!info) return false;
+    if (typeof navigator === 'undefined' || !navigator.hid || !navigator.hid.getDevices) return false;
+    try {
+      const devices = await navigator.hid.getDevices();
+      const match = devices.find(d => this._matchesRememberedHid(d));
+      if (!match) return false;
+      this.debugMessage('tryReconnect: found authorised HID device, reconnecting silently');
+      return await this._autoReconnectHid(match, info.radioType);
+    } catch (e) {
+      this.debugMessage(`HID reconnect failed: ${e.message}`);
+      return false;
+    }
+  }
+
+  async _tryReconnectSerial() {
+    const info = this._rememberedSerialInfo();
+    if (!info) return false;
+    if (typeof navigator === 'undefined' || !navigator.serial || !navigator.serial.getPorts) return false;
+    try {
+      const ports = await navigator.serial.getPorts();
+      const match = ports.find(p => this._matchesRememberedSerial(p));
+      if (!match) return false;
+      this.debugMessage('tryReconnect: found authorised serial port, reconnecting silently');
+      return await this._autoReconnectSerial(match);
+    } catch (e) {
+      this.debugMessage(`Serial reconnect failed: ${e.message}`);
+      return false;
+    }
+  }
+
+  // ---- WebHID (MK22 bootloader) persistent-permission reconnect -------------
+
+  async handleHIDConnect(event) {
+    if (!this.autoReconnectEnabled) return;
+    if (this.connected || this._busy || this._activeOp || this._autoReconnecting) return;
+    if (!this._matchesRememberedHid(event.device)) return;
+    this.debugMessage('WebHID device reconnected - attempting silent reconnect');
+    const info = this._rememberedHidInfo();
+    await this._autoReconnectHid(event.device, info && info.radioType);
+  }
+
+  async _autoReconnectHid(device, radioType) {
+    if (this._autoReconnecting) return false;
+    this._autoReconnecting = true;
+    try {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          await this._setupWebHIDDevice(device, radioType || this.radioType);
+          this.updateStatus('connected', `Reconnected: ${this.radioModel || this.radioType}`);
+          if (typeof Utils !== 'undefined' && Utils.toast) Utils.toast('Radio reconnected', 'success');
+          return true;
+        } catch (e) {
+          this.debugMessage(`HID reconnect attempt ${attempt}/5 failed: ${e.message}`);
+          await this.delay(400);
+        }
+      }
+      this.updateStatus('disconnected', 'Radio disconnected - click Connect to retry');
+      return false;
+    } finally {
+      this._autoReconnecting = false;
+    }
+  }
+
+  _rememberHidDevice() {
+    try {
+      if (!this.hidDevice) return;
+      const info = {
+        vendorId: this.hidDevice.vendorId,
+        productId: this.hidDevice.productId,
+        productName: this.hidDevice.productName || null,
+        radioType: this.radioType
+      };
+      this._rememberedHid = info;
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        Utils.storage.set(CONFIG.STORAGE.HID_DEVICE, info);
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  _rememberedHidInfo() {
+    if (this._rememberedHid) return this._rememberedHid;
+    try {
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        this._rememberedHid = Utils.storage.get(CONFIG.STORAGE.HID_DEVICE) || null;
+      }
+    } catch (e) { /* ignore */ }
+    return this._rememberedHid;
+  }
+
+  _matchesRememberedHid(device) {
+    const info = this._rememberedHidInfo();
+    if (!info || !device) return false;
+    if (device.vendorId !== info.vendorId || device.productId !== info.productId) return false;
+    return true;
+  }
+
+  // ---- Web Serial persistent-permission reconnect ---------------------------
+
+  async handleSerialConnect(event) {
+    if (!this.autoReconnectEnabled) return;
+    if (this.connected || this._busy || this._activeOp || this._autoReconnecting) return;
+    if (!this._matchesRememberedSerial(event.port)) return;
+    this.debugMessage('Web Serial device reconnected - attempting silent reconnect');
+    await this._autoReconnectSerial(event.port);
+  }
+
+  async _autoReconnectSerial(port) {
+    if (this._autoReconnecting) return false;
+    this._autoReconnecting = true;
+    try {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          await this.connectSerial(port);
+          this.updateStatus('connected', `Reconnected: ${this.radioModel || this.radioType}`);
+          if (typeof Utils !== 'undefined' && Utils.toast) Utils.toast('Radio reconnected', 'success');
+          return true;
+        } catch (e) {
+          this.debugMessage(`Serial reconnect attempt ${attempt}/5 failed: ${e.message}`);
+          await this.delay(400);
+        }
+      }
+      this.updateStatus('disconnected', 'Radio disconnected - click Connect to retry');
+      return false;
+    } finally {
+      this._autoReconnecting = false;
+    }
+  }
+
+  _rememberSerialPort(port) {
+    try {
+      if (!port || !port.getInfo) return;
+      const pi = port.getInfo();
+      const info = {
+        usbVendorId: (pi.usbVendorId !== undefined) ? pi.usbVendorId : null,
+        usbProductId: (pi.usbProductId !== undefined) ? pi.usbProductId : null,
+        radioType: this.radioType || CONFIG.RADIO_TYPES.DM32
+      };
+      this._rememberedSerial = info;
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        Utils.storage.set(CONFIG.STORAGE.SERIAL_DEVICE, info);
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  _rememberedSerialInfo() {
+    if (this._rememberedSerial) return this._rememberedSerial;
+    try {
+      if (typeof Utils !== 'undefined' && Utils.storage) {
+        this._rememberedSerial = Utils.storage.get(CONFIG.STORAGE.SERIAL_DEVICE) || null;
+      }
+    } catch (e) { /* ignore */ }
+    return this._rememberedSerial;
+  }
+
+  _matchesRememberedSerial(port) {
+    const info = this._rememberedSerialInfo();
+    if (!info || !port || !port.getInfo) return false;
+    let pi;
+    try { pi = port.getInfo(); } catch (e) { return false; }
+    if (info.usbVendorId != null && pi.usbVendorId !== info.usbVendorId) return false;
+    if (info.usbProductId != null && pi.usbProductId !== info.usbProductId) return false;
+    return true;
   }
 
   /**
@@ -203,12 +508,13 @@ class OpenGD77USB {
   handleHIDDisconnect(event) {
     if (this.hidDevice && event.device === this.hidDevice) {
       console.log('WebHID device disconnected unexpectedly (radio may have rebooted)');
+      this._disconnectCount++;
       this.hidDevice = null;
       this.useWebHID = false;
       this.connected = false;
       this.isHIDMode = false;
       this.isInDFUMode = false;
-      this.updateStatus('disconnected', 'Radio disconnected - please reconnect');
+      this.updateStatus('disconnected', 'Radio disconnected - waiting to reconnect…');
     }
   }
 
@@ -220,6 +526,7 @@ class OpenGD77USB {
   handleSerialDisconnect(event) {
     if (this.serialPort && (!event || !event.target || event.target === this.serialPort)) {
       console.log('Web Serial port disconnected unexpectedly');
+      this._disconnectCount++;
       this.serialReader = null;
       this.serialWriter = null;
       this.serialPort = null;
@@ -228,7 +535,7 @@ class OpenGD77USB {
       this._serialBuffer = [];
       this._serialReadError = null;
       this._serialReadLoop = null;
-      this.updateStatus('disconnected', 'Radio disconnected - please reconnect');
+      this.updateStatus('disconnected', 'Radio disconnected - waiting to reconnect…');
     }
   }
 
@@ -355,6 +662,8 @@ class OpenGD77USB {
 
     this.connected = true;
     this.updateStatus('connected', `Connected: ${this.radioModel} (${this.radioType} DFU)`);
+    // Remember the authorised HID device so it can reconnect silently.
+    this._rememberHidDevice();
   }
 
   /**
@@ -636,7 +945,7 @@ class OpenGD77USB {
    *
    * @returns {Promise<boolean>} True if connected
    */
-  async connectSerial() {
+  async connectSerial(portOverride = null) {
     if (this._busy) {
       throw new Error(`Radio is busy: ${this._busyOp}`);
     }
@@ -644,7 +953,7 @@ class OpenGD77USB {
     this._busyOp = 'connecting';
     try {
       await this._resetTransportState();
-      await this._openSerialPort(false);
+      await this._openSerialPort(false, portOverride);
 
       this.radioType = CONFIG.RADIO_TYPES.DM32;
       this._explicitRadioType = true;
@@ -652,6 +961,9 @@ class OpenGD77USB {
 
       // Persist the radio type so it is remembered for future sessions
       Utils.storage.set(CONFIG.STORAGE.RADIO_TYPE, CONFIG.RADIO_TYPES.DM32);
+
+      // Remember the port so a reconnect does not need the chooser
+      this._rememberSerialPort(this.serialPort);
 
       // Detect whether the radio is running the app (CPS mode) or sitting in
       // the bootloader (firmware update mode: PTT + SK1 on power-on).
@@ -724,7 +1036,7 @@ class OpenGD77USB {
    * Open the Web Serial port (no protocol handshake). Used by connectSerial()
    * and by the DM-32 firmware-flash / SPI-flash backup tools.
    */
-  async _openSerialPort(reuse = true) {
+  async _openSerialPort(reuse = true, portOverride = null) {
     // Reuse the already-open serial port if requested and available
     if (reuse && this.serialPort) {
       this.connected = true;
@@ -743,7 +1055,8 @@ class OpenGD77USB {
       throw new Error('Web Serial is not supported in this browser. Please use Chrome, Edge, or Opera.');
     }
 
-    const port = await navigator.serial.requestPort();
+    // Use a previously-authorised port when reconnecting (no chooser), else prompt.
+    const port = portOverride || await navigator.serial.requestPort();
     await port.open({
       baudRate: 115200,
       dataBits: 8,
@@ -764,6 +1077,8 @@ class OpenGD77USB {
     this.isHIDMode = false;
     this.isInDFUMode = false;
     this.connected = true;
+
+    this._rememberSerialPort(port);
 
     this.debugMessage('=== WEB SERIAL CONNECTED ===');
     this.debugMessage(`Port info: ${port.getInfo ? JSON.stringify(port.getInfo()) : 'unknown'}, 115200 8N1`);
@@ -916,6 +1231,7 @@ class OpenGD77USB {
     }
   }
 
+
   /**
    * Continuously read from the serial port into an internal buffer.
    * Errors are stored so receiveData() can surface them.
@@ -929,6 +1245,8 @@ class OpenGD77USB {
           for (let i = 0; i < value.length; i++) {
             this._serialBuffer.push(value[i]);
           }
+          this.debugMessage(`SERIAL RX: ${value.length} bytes`);
+          this.debugLog('SERIAL RX', value);
         }
       }
     } catch (e) {
@@ -1262,11 +1580,11 @@ class OpenGD77USB {
    * Request access to an OpenGD77 radio
    * Supports both MK22 (GD-77) and STM32 (TYT) radios
    */
-  async connect() {
+  async connect(deviceOverride = null) {
     if (this._busy || this._activeOp) {
       throw new Error(`Radio is busy: ${this._busyOp || this._activeOp}. Wait for it to finish before reconnecting.`);
     }
-    if (!this.isSupported() && !this.isHIDSupported()) {
+    if (!deviceOverride && !this.isSupported() && !this.isHIDSupported()) {
       throw new Error('WebUSB and WebHID are not supported in this browser. Please use Chrome, Edge, or Opera.');
     }
 
@@ -1280,7 +1598,7 @@ class OpenGD77USB {
       // On Windows, the OS HID driver claims the MK22 DFU device (VID 0x15A2, PID 0x0073),
       // preventing it from appearing in the WebUSB device picker. WebHID can access it directly.
       // Only try WebHID if user has MK22 selected (or no type selected), to avoid confusion for STM32 users.
-      if (this.isHIDSupported() && (!userSelectedRadioType || userSelectedRadioType === CONFIG.RADIO_TYPES.MK22)) {
+      if (!deviceOverride && this.isHIDSupported() && (!userSelectedRadioType || userSelectedRadioType === CONFIG.RADIO_TYPES.MK22)) {
         try {
           const hidDevices = await navigator.hid.requestDevice({
             filters: [{ vendorId: CONFIG.USB.VID, productId: CONFIG.USB.PID }]  // MK22 bootloader
@@ -1298,18 +1616,24 @@ class OpenGD77USB {
         }
       }
 
-      if (!this.isSupported()) {
-        throw new Error('WebUSB is not supported in this browser. Please use Chrome, Edge, or Opera.');
-      }
+      if (deviceOverride) {
+        // Re-acquire an already-authorised device (auto-reconnect) - no chooser.
+        this.device = deviceOverride;
+        this.debugMessage('Using previously authorised USB device (silent reconnect)');
+      } else {
+        if (!this.isSupported()) {
+          throw new Error('WebUSB is not supported in this browser. Please use Chrome, Edge, or Opera.');
+        }
 
-      // Request device with OpenGD77 VID/PID or TYT/STM32 VID/PID
-      this.device = await navigator.usb.requestDevice({
-        filters: [
-          { vendorId: CONFIG.USB.VID, productId: CONFIG.USB.PID },           // MK22 bootloader (GD-77)
-          { vendorId: CONFIG.USB_OPENGD77.VID, productId: CONFIG.USB_OPENGD77.PID }, // OpenGD77 CDC-ACM serial mode
-          { vendorId: CONFIG.USB_STM32.VID, productId: CONFIG.USB_STM32.PID } // STM32 (TYT)
-        ]
-      });
+        // Request device with OpenGD77 VID/PID or TYT/STM32 VID/PID
+        this.device = await navigator.usb.requestDevice({
+          filters: [
+            { vendorId: CONFIG.USB.VID, productId: CONFIG.USB.PID },           // MK22 bootloader (GD-77)
+            { vendorId: CONFIG.USB_OPENGD77.VID, productId: CONFIG.USB_OPENGD77.PID }, // OpenGD77 CDC-ACM serial mode
+            { vendorId: CONFIG.USB_STM32.VID, productId: CONFIG.USB_STM32.PID } // STM32 (TYT)
+          ]
+        });
+      }
 
       // Only open the device if it's not already opened
       if (!this.device.opened) {
@@ -1596,7 +1920,10 @@ class OpenGD77USB {
       this.radioModel = this.device.productName || (this.isFlashBasedRadio() ? 'TYT Radio' : 'OpenGD77');
       const modeStr = this.isInDFUMode ? 'DFU' : 'Serial';
       this.updateStatus('connected', `Connected: ${this.radioModel} (${this.radioType} ${modeStr})`);
-      
+
+      // Remember the authorised device so a reboot/reload can reconnect silently.
+      this._rememberDevice();
+
       return true;
     } catch (error) {
       this.connected = false;
@@ -1973,8 +2300,9 @@ class OpenGD77USB {
   }
 
   /**
-   * Send data to the radio
+   * Read theme data from the radio
    */
+
   async sendData(data) {
     if (!this.connected || (!this.device && !this.hidDevice && !this.serialPort)) {
       throw new Error('Not connected to radio');
@@ -2339,6 +2667,14 @@ class OpenGD77USB {
    * - HID (0x15A2:0x0073): MK22 bootloader uses PROGRA command sequence
    */
   async initProtocol() {
+    // DFU / bootloader mode has no CPS serial interface (no bulk endpoint),
+    // so any codeplug/preferences operation is doomed. Fail with a clear
+    // message instead of a cryptic "endpoint number is out of range" from
+    // WebUSB when the radio is left in firmware-update mode.
+    if (this.isInDFUMode) {
+      throw new Error('Radio is in firmware update (DFU) mode. Codeplug and preferences operations are unavailable until it starts normally - unplug and reconnect (or power-cycle the radio), then connect again.');
+    }
+
     // Use CDC-ACM serial protocol for non-HID mode (applies to BOTH MK22 and STM32)
     // The protocol is the same regardless of radioType when in CDC-ACM serial mode
     if (!this.isHIDMode) {
@@ -2878,17 +3214,112 @@ class OpenGD77USB {
   }
 
   /**
+   * Read the 128-byte radio preferences blob (settingsStruct_t) at 0x604B.
+   * Assumes a CPS session is already open (initProtocol has run). Uses EEPROM
+   * mode, which maps to flash-emulated EEPROM on STM32/DM32 and the real I2C
+   * EEPROM on MK22.
+   */
+  async readSettingsBlob(onProgress) {
+    return await this.readFlashOrEEPROM(
+      CONFIG.PROTOCOL.SETTINGS_START,
+      CONFIG.PROTOCOL.SETTINGS_SIZE,
+      CONFIG.PROTOCOL.DATA_MODE.READ_EEPROM,
+      onProgress
+    );
+  }
+
+  /**
+   * Standalone read of the radio preferences (opens and closes its own session).
+   * @returns {Promise<Uint8Array>} 128-byte settingsStruct_t blob
+   */
+  async readSettings(onProgress) {
+    return this._serialized('read settings', async () => {
+      if (!this.connected) throw new Error('Not connected to radio');
+      if (this.isHIDMode) {
+        throw new Error('Radio preferences cannot be read in bootloader (DFU) mode - connect normally');
+      }
+      await this.initProtocol();
+      try {
+        // Flush the radio's RAM settings copy to storage before reading.
+        try { await this.sendSTM32Command(6, CONFIG.PROTOCOL.COMMAND_6_OPTIONS.SAVE_SETTINGS_AND_VFOS); } catch (e) { /* best effort */ }
+        await this.delay(50);
+        return await this.readSettingsBlob(onProgress);
+      } finally {
+        await this.exitCpsMode();
+      }
+    });
+  }
+
+  /**
+   * Write the radio preferences blob.
+   *
+   * MK22 serial uses EEPROM write (subcommand 4). STM32/DM32 treat that as a
+   * no-op, so they write sector 6 of the flash-emulated EEPROM instead (the
+   * firmware preserves the rest of the sector, including LUCZ, via read-modify-
+   * write). The radio is then rebooted with "reboot only" so its RAM copy does
+   * not overwrite the blob we just wrote.
+   *
+   * @param {Uint8Array} bytes 128-byte settingsStruct_t blob
+   */
+  async writeSettingsRaw(bytes, onProgress) {
+    return this._serialized('write settings', async () => {
+      if (!this.connected) throw new Error('Not connected to radio');
+      if (this.isHIDMode) {
+        throw new Error('Radio preferences cannot be written in bootloader (DFU) mode - connect normally');
+      }
+      if (!bytes || bytes.length < CONFIG.PROTOCOL.SETTINGS_SIZE) {
+        throw new Error(`Invalid settings blob (${bytes ? bytes.length : 0} bytes)`);
+      }
+      await this.initProtocol();
+      const payload = bytes.slice(0, CONFIG.PROTOCOL.SETTINGS_SIZE);
+      let verified = false;
+      try {
+        if (this.isFlashBasedRadio()) {
+          await this.writeFlash(CONFIG.PROTOCOL.SETTINGS_START, payload, onProgress);
+        } else {
+          await this.writeEEPROM(CONFIG.PROTOCOL.SETTINGS_START, payload, onProgress);
+        }
+
+        // Read the blob back and confirm it landed. Some firmwares silently
+        // ignore a write (wrong command/address) and would then reboot into a
+        // settings reset, so never reboot on an unverified write.
+        const readback = await this.readSettingsBlob();
+        let diff = -1;
+        for (let i = 0; i < payload.length; i++) {
+          if (readback[i] !== payload[i]) { diff = i; break; }
+        }
+        if (diff >= 0) {
+          this.debugMessage(`Settings verify mismatch at offset ${diff}: wrote 0x${payload[diff].toString(16)}, read 0x${readback[diff].toString(16)}`);
+          throw new Error(`Settings write did not verify (byte ${diff} differs). Radio not rebooted.`);
+        }
+        this.debugMessage('Settings write verified against readback');
+        verified = true;
+      } finally {
+        if (verified) {
+          // Match the reference CPS: brief settle, then reboot-only (option 1)
+          // so the radio reloads the blob. Do NOT send command 5/7 afterwards.
+          try { await this.sendSTM32Command(6, CONFIG.PROTOCOL.COMMAND_6_OPTIONS.WAIT_10MS); } catch (e) { /* best effort */ }
+          try { await this.sendSTM32Command(6, CONFIG.PROTOCOL.COMMAND_6_OPTIONS.REBOOT_ONLY); } catch (e) { /* best effort */ }
+        } else {
+          // Leave the radio usable (RAM settings intact) so the user can retry.
+          try { await this.exitCpsMode(); } catch (e) { /* best effort */ }
+        }
+      }
+    });
+  }
+
+  /**
    * Write codeplug to radio
    * Automatically uses the correct protocol based on radio type and connection mode:
    * - MK22 HID mode: Uses page-based addressing with CWB command (bootloader protocol)
    * - MK22 CDC-ACM serial mode: Uses OpenGD77 serial protocol with EEPROM/Flash modes
    * - STM32: Uses OpenGD77 serial protocol with writeFlash/writeEEPROM
    */
-  async writeCodeplug(data, onProgress) {
-    return this._serialized('write codeplug', () => this._writeCodeplugImpl(data, onProgress));
+  async writeCodeplug(data, onProgress, options = {}) {
+    return this._serialized('write codeplug', () => this._writeCodeplugImpl(data, onProgress, options));
   }
 
-  async _writeCodeplugImpl(data, onProgress) {
+  async _writeCodeplugImpl(data, onProgress, options = {}) {
     if (!this.connected) {
       throw new Error('Not connected to radio');
     }
@@ -2907,10 +3338,10 @@ class OpenGD77USB {
         await this.writeCodeplugMK22HID(data, onProgress);
       } else if (!this.isHIDMode && !this.isFlashBasedRadio()) {
         // MK22 CDC-ACM serial mode uses serial protocol with EEPROM/Flash modes
-        await this.writeCodeplugMK22Serial(data, onProgress);
+        await this.writeCodeplugMK22Serial(data, onProgress, options);
       } else {
         // STM32 radios use OpenGD77 serial protocol
-        await this.writeCodeplugSTM32(data, onProgress);
+        await this.writeCodeplugSTM32(data, onProgress, options);
       }
       
     } catch (error) {
@@ -3018,7 +3449,7 @@ class OpenGD77USB {
    * - MK22 uses DataModeWriteFlash (3) for segments 3 & 4 (SPI Flash)
    * - No STM32_FLASH_ADDRESS_OFFSET needed for MK22
    */
-  async writeCodeplugMK22Serial(data, onProgress) {
+  async writeCodeplugMK22Serial(data, onProgress, options = {}) {
     this.debugMessage('=== MK22 SERIAL WRITE CODEPLUG START ===');
     
     // Helper function to report progress to both callbacks (internal and external)
@@ -3098,13 +3529,35 @@ class OpenGD77USB {
     });
     this.debugMessage('Segment 4 complete');
     
+    // Optional: write radio preferences in the same session (Clone flow only).
+    // MK22 uses the real EEPROM; on STM32/DM32 the writer below uses flash.
+    let settingsWritten = false;
+    const settingsBytes = options.settingsBytes;
+    if (settingsBytes && settingsBytes.length >= CONFIG.PROTOCOL.SETTINGS_SIZE) {
+      this.debugMessage('=== Writing MK22 radio preferences (EEPROM 0x604B) ===');
+      updateProgress(95, 'Writing radio preferences...');
+      await this.writeEEPROM(
+        CONFIG.PROTOCOL.SETTINGS_START,
+        settingsBytes.slice(0, CONFIG.PROTOCOL.SETTINGS_SIZE),
+        () => {}
+      );
+      settingsWritten = true;
+      this.debugMessage('Radio preferences written');
+    }
+    
     // Attempt to sync the radio clock (UTC) before rebooting. Best-effort: if
     // it fails, the codeplug write still completes.
     await this.attemptClockSync();
 
-    // C# OpenGD77Form.cs: sendCommand(6, 0) - save settings and reboot
-    this.debugMessage('Sending save settings and reboot command...');
-    await this.sendSTM32Command(6, 0);
+    if (settingsWritten) {
+      // Reboot only: re-saving settings would overwrite the blob just written.
+      this.debugMessage('Sending reboot-only command (preferences written)...');
+      await this.sendSTM32Command(6, CONFIG.PROTOCOL.COMMAND_6_OPTIONS.REBOOT_ONLY);
+    } else {
+      // C# OpenGD77Form.cs: sendCommand(6, 0) - save settings and reboot
+      this.debugMessage('Sending save settings and reboot command...');
+      await this.sendSTM32Command(6, 0);
+    }
     
     this.debugMessage('=== MK22 SERIAL WRITE CODEPLUG COMPLETE ===');
     updateProgress(100, 'Write complete');
@@ -3120,7 +3573,7 @@ class OpenGD77USB {
    * - WriteFlash for segments 3 & 4 (Flash areas)
    * - sendCommand(6, 0) at end to save settings (NOT VFOs) and reboot
    */
-  async writeCodeplugSTM32(data, onProgress) {
+  async writeCodeplugSTM32(data, onProgress, options = {}) {
     this.debugMessage('=== STM32 WRITE CODEPLUG START ===');
     
     // Helper function to report progress to both callbacks (internal and external)
@@ -3240,14 +3693,37 @@ class OpenGD77USB {
       }
     }
 
+    // Optional: write radio preferences in the same session (Clone flow only).
+    // STM32/DM32 have no direct EEPROM write, so use the flash-emulated EEPROM
+    // sector (the firmware preserves the rest of the sector, incl. LUCZ).
+    let settingsWritten = false;
+    const settingsBytes = options.settingsBytes;
+    if (settingsBytes && settingsBytes.length >= CONFIG.PROTOCOL.SETTINGS_SIZE) {
+      this.debugMessage('=== Writing STM32 radio preferences (flash 0x604B) ===');
+      updateProgress(93, 'Writing radio preferences...');
+      await this.writeFlash(
+        CONFIG.PROTOCOL.SETTINGS_START,
+        settingsBytes.slice(0, CONFIG.PROTOCOL.SETTINGS_SIZE),
+        () => {}
+      );
+      settingsWritten = true;
+      this.debugMessage('Radio preferences written');
+    }
+
     // Attempt to sync the radio clock (UTC) before rebooting. Best-effort: if
     // it fails, the codeplug write still completes.
     await this.attemptClockSync();
 
-    // Save settings and reboot
     updateProgress(95, 'Writing codeplug... 95%');
-    this.debugMessage('Sending save settings command (option 0) to save and reboot...');
-    await this.sendSTM32Command(6, 0);
+    if (settingsWritten) {
+      // Reboot only: re-saving settings would overwrite the blob just written.
+      this.debugMessage('Sending reboot-only command (preferences written)...');
+      await this.sendSTM32Command(6, CONFIG.PROTOCOL.COMMAND_6_OPTIONS.REBOOT_ONLY);
+    } else {
+      // Save settings and reboot
+      this.debugMessage('Sending save settings command (option 0) to save and reboot...');
+      await this.sendSTM32Command(6, 0);
+    }
     
     this.debugMessage('=== STM32 WRITE CODEPLUG COMPLETE ===');
     updateProgress(100, 'Write complete');
@@ -4196,16 +4672,39 @@ class OpenGD77USB {
         infoBuffer = response.slice(3);
       }
       
-      // Parse radio info structure
-      const view = new DataView(infoBuffer.buffer);
+      // Parse radio info structure. Use the view's byteOffset/length so this is
+      // correct even if infoBuffer is a subarray of a larger USB buffer.
+      const view = new DataView(infoBuffer.buffer, infoBuffer.byteOffset, infoBuffer.byteLength);
+      const rawFlashId = view.getUint32(40, true);
+      // The firmware stores a 16-bit JEDEC flash part ID (SPI_Flash_readPartID()).
+      // A value that does not fit means the firmware's radio-info struct differs
+      // (seen on some 10W/third-party builds), so the offset is wrong. Treat it
+      // as unknown rather than using it to pick a (wrong) storage capacity.
+      const flashIdPlausible = rawFlashId > 0 && rawFlashId <= 0xFFFF;
+      // Newer firmware structs (structVersion >= 4) appear to move the fields
+      // after buildDateTime, so the fixed offset no longer points at flashId. If
+      // the fixed read is invalid, scan the payload for a known JEDEC part ID so
+      // the radio's real flash capacity is still available.
+      const scannedFlashId = flashIdPlausible ? 0 : this.findJEDECFlashId(infoBuffer);
       const radioInfo = {
         structVersion: view.getUint32(0, true),
         radioType: view.getUint32(4, true),
         gitRevision: this.extractString(infoBuffer, 8, 16),
         buildDateTime: this.extractString(infoBuffer, 24, 16),
-        flashId: view.getUint32(40, true),
-        features: view.getUint16(44, true)
+        flashId: flashIdPlausible ? rawFlashId : scannedFlashId,
+        rawFlashId,
+        features: view.getUint16(44, true),
+        rawHex: Array.from(infoBuffer).map(b => b.toString(16).padStart(2, '0')).join('')
       };
+
+      this.debugMessage(`Radio info raw (${infoBuffer.length} bytes): ${radioInfo.rawHex}`);
+      if (!flashIdPlausible) {
+        if (scannedFlashId) {
+          this.debugMessage(`Radio info flashId at fixed offset invalid (0x${(rawFlashId >>> 0).toString(16)}); recovered 0x${scannedFlashId.toString(16)} by scanning (structVersion=${radioInfo.structVersion}, radioType=${radioInfo.radioType})`);
+        } else {
+          this.debugMessage(`Radio info flashId 0x${(rawFlashId >>> 0).toString(16)} looks invalid (not a 16-bit JEDEC ID) - ignoring (structVersion=${radioInfo.structVersion}, radioType=${radioInfo.radioType})`);
+        }
+      }
       
       // Decode radio type
       const radioTypes = {
@@ -4233,7 +4732,7 @@ class OpenGD77USB {
       };
       
       this.debugMessage(`=== READ RADIO INFO COMPLETE ===`);
-      this.debugMessage(`Radio: ${radioInfo.radioTypeName}, Git: ${radioInfo.gitRevision}`);
+      this.debugMessage(`Radio: ${radioInfo.radioTypeName}, Git: ${radioInfo.gitRevision}, Flash ID: 0x${(radioInfo.flashId >>> 0).toString(16)}`);
       
       // Store radioInfo for use by other methods (e.g., getRadioModel)
       this.radioInfo = radioInfo;
@@ -4303,10 +4802,29 @@ class OpenGD77USB {
     let str = '';
     for (let i = 0; i < maxLength; i++) {
       const char = buffer[offset + i];
-      if (char === 0) break;
+      // Stop at the terminator or any non-printable byte, so a mis-sized field
+      // cannot leak control characters into the parsed value.
+      if (char === 0 || char < 0x20 || char > 0x7E) break;
       str += String.fromCharCode(char);
     }
     return str;
+  }
+
+  /**
+   * Locate a known 16-bit JEDEC flash part ID in a radio-info payload. Used as
+   * a fallback when a newer firmware's struct layout puts flashId at an offset
+   * we don't know, so capacity still works. Prefers 4-byte-aligned matches.
+   */
+  findJEDECFlashId(buffer) {
+    const ids = [0x4014, 0x4015, 0x4017, 0x4018, 0x7018];
+    for (const aligned of [true, false]) {
+      for (let off = 0; off + 2 <= buffer.length; off++) {
+        if (aligned && (off % 4) !== 0) continue;
+        const v = buffer[off] | (buffer[off + 1] << 8);
+        if (ids.includes(v)) return v;
+      }
+    }
+    return 0;
   }
 
   /**
@@ -5483,7 +6001,8 @@ class OpenGD77USB {
   }
 
   /**
-   * Write a block into the OpenGD77 custom data area (SPI flash).
+   * Write a block into the OpenGD77 custom data area (SPI flash), preserving
+   * any other blocks (boot image, melody, theme, satellites).
    *
    * Custom data layout: "OpenGD77" (8) + version (4), then blocks of
    * [type:1][0:3][size:4 LE][data]. Uninitialised space is 0xFF.
@@ -6840,7 +7359,7 @@ class OpenGD77USB {
       recipient: 'interface',
       request: request,
       value: value,
-      index: index
+      index: await this._ensureDfuInterfaceClaimed()
     };
     
     // WebUSB controlTransferOut requires an ArrayBuffer (or BufferSource) as second parameter.
@@ -6872,13 +7391,14 @@ class OpenGD77USB {
    */
   async dfuControlIn(request, value, index, length) {
     if (!this.device) throw new Error('Device not connected');
+    const iface = await this._ensureDfuInterfaceClaimed();
     
     const result = await this.device.controlTransferIn({
       requestType: 'class',
       recipient: 'interface',
       request: request,
       value: value,
-      index: index
+      index: iface
     }, length);
     
     if (result.status !== 'ok') {
@@ -6886,6 +7406,32 @@ class OpenGD77USB {
     }
     
     return new Uint8Array(result.data.buffer);
+  }
+
+  /**
+   * Make sure the DFU interface is claimed before any class control transfer.
+   * The claim can be lost (or never taken) if the radio re-enumerated, if the
+   * OS driver refused it at connect time, or after a transport reset - which
+   * otherwise surfaces as "The specified interface has not been claimed".
+   */
+  async _ensureDfuInterfaceClaimed() {
+    if (!this.device) throw new Error('Device not connected');
+    const iface = (typeof this.interfaceNumber === 'number') ? this.interfaceNumber : 0;
+    if (Array.isArray(this.claimedInterfaces) && this.claimedInterfaces.includes(iface)) {
+      return iface;
+    }
+    try {
+      await this.device.claimInterface(iface);
+      if (!Array.isArray(this.claimedInterfaces)) this.claimedInterfaces = [];
+      if (!this.claimedInterfaces.includes(iface)) this.claimedInterfaces.push(iface);
+      this.debugMessage(`DFU: claimed interface ${iface} before control transfer`);
+      return iface;
+    } catch (e) {
+      throw new Error(
+        `DFU interface ${iface} is not claimed and could not be claimed (${e.message}). ` +
+        'Reconnect the radio in DFU mode; on Windows make sure the WinUSB driver is installed (Zadig).'
+      );
+    }
   }
 
   /**

@@ -125,7 +125,7 @@
       },
       "versions": {
         "R20260131": {
-          "display": "2026-01-31",
+          "display": "2026-01-31 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -242,7 +242,7 @@
           "languagesPath": "MK22/R20260131/firmware"
         },
         "R20240908": {
-          "display": "2024-09-08",
+          "display": "2024-09-08 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -359,7 +359,7 @@
           "languagesPath": "MK22/R20240908/firmware"
         },
         "R20231231": {
-          "display": "2023-12-31",
+          "display": "2023-12-31 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -476,7 +476,7 @@
           "languagesPath": "MK22/R20231231/firmware"
         },
         "R20230304": {
-          "display": "2023-03-04",
+          "display": "2023-03-04 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -557,7 +557,7 @@
           "languagesPath": null
         },
         "R20220228": {
-          "display": "2022-02-28",
+          "display": "2022-02-28 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -638,7 +638,7 @@
           "languagesPath": null
         },
         "R20210711": {
-          "display": "2021-07-11",
+          "display": "2021-07-11 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -719,7 +719,7 @@
           "languagesPath": null
         },
         "R20210529": {
-          "display": "2021-05-29",
+          "display": "2021-05-29 (Official Build)",
           "models": {
             "OpenDM1801": {
               "variants": {
@@ -806,7 +806,7 @@
       },
       "versions": {
         "R20260131": {
-          "display": "2026-01-31",
+          "display": "2026-01-31 (Official Build)",
           "models": {
             "OpenDM1701": {
               "displayName": "DM-1701",
@@ -883,7 +883,7 @@
           "languagesPath": "MDUV380_DM1701/R20260131/firmware"
         },
         "R20240908": {
-          "display": "2024-09-08",
+          "display": "2024-09-08 (Official Build)",
           "models": {
             "OpenDM1701": {
               "displayName": "DM-1701",
@@ -960,7 +960,7 @@
           "languagesPath": "MDUV380_DM1701/R20240908/firmware"
         },
         "R20231231": {
-          "display": "2023-12-31",
+          "display": "2023-12-31 (Official Build)",
           "models": {
             "OpenDM1701": {
               "displayName": "DM-1701",
@@ -1019,7 +1019,7 @@
       },
       "versions": {
         "R20260131": {
-          "display": "2026-01-31",
+          "display": "2026-01-31 (Official Build)",
           "models": {
             "MD9600_V1": {
               "displayName": "MD-9600 (Hardware V1)",
@@ -1094,7 +1094,7 @@
           "languagesPath": "MD9600/R20260131/firmware"
         },
         "R20240908": {
-          "display": "2024-09-08",
+          "display": "2024-09-08 (Official Build)",
           "models": {
             "MD9600_V1": {
               "displayName": "MD-9600 (Hardware V1)",
@@ -1169,7 +1169,7 @@
           "languagesPath": "MD9600/R20240908/firmware"
         },
         "R20231231": {
-          "display": "2023-12-31",
+          "display": "2023-12-31 (Official Build)",
           "models": {
             "MD9600_V1": {
               "displayName": "MD-9600 (Hardware V1)",
@@ -1257,7 +1257,7 @@
       },
       "versions": {
         "R20260131": {
-          "display": "2026-01-31",
+          "display": "2026-01-31 (Official Build)",
           "models": {
             "OpenMD2017": {
               "displayName": "MD-2017",
@@ -1281,7 +1281,7 @@
           "languagesPath": "MD2017/R20260131/firmware"
         },
         "R20240908": {
-          "display": "2024-09-08",
+          "display": "2024-09-08 (Official Build)",
           "models": {
             "OpenMD2017": {
               "displayName": "MD-2017",
@@ -1317,7 +1317,7 @@
       },
       "versions": {
         "R20260711": {
-          "display": "2026-07-11",
+          "display": "2026-07-11 (Official Build)",
           "models": {
             "OpenDM32": {
               "displayName": "DM-32 / UV008",
@@ -1335,7 +1335,7 @@
           "languagesPath": "DM32/R20260711/firmware"
         },
         "R20260704": {
-          "display": "2026-07-04",
+          "display": "2026-07-04 (Official Build)",
           "models": {
             "OpenDM32": {
               "displayName": "DM-32 / UV008",

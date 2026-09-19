@@ -15,6 +15,9 @@ const CONFIG = {
 
   // TLE/Satellite data sources - Celestrak sends CORS headers, fetched directly
   TLE_API: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle',
+  // Some amateur satellites (e.g. IO-86 / LAPAN-A2) are not in CelesTrak's
+  // amateur group; AMSAT's bare TLE file fills those gaps. Merged in by default.
+  TLE_SUPPLEMENTAL: 'https://www.amsat.org/tle/current/nasabare.txt',
   
   // Predefined TLE sources that can be selected
   TLE_SOURCES: {
@@ -79,6 +82,11 @@ const CONFIG = {
     // Memory locations (MK22 radios)
     CODEPLUG_START: 0x00000,
     CODEPLUG_END: 0x20000,
+    // Radio preferences (settingsStruct_t). Same logical address on every
+    // platform; on STM32/DM32 this is flash-emulated EEPROM at offset 0.
+    // Address is not covered by the codeplug read/write segments.
+    SETTINGS_START: 0x604B,
+    SETTINGS_SIZE: 128,
     DMRID_START: 0x30000,
     DMRID_END: 0x50000,
     CALIBRATION_START: 0x80000,
@@ -236,6 +244,36 @@ const CONFIG = {
     'None', '0.0005 deg', '0.001 deg', '0.005 deg',
     '0.01 deg', '0.05 deg', '0.1 deg', '0.5 deg'
   ],
+
+  // Regional terrestrial APRS channel frequencies (MHz). Used to seed a
+  // starter APRS config (WIDE1-1 / WIDE2-1, QSY to the regional frequency).
+  APRS_REGIONS: [
+    { id: 'na', label: 'North America', freq: 144.390 },
+    { id: 'co', label: 'Colombia',      freq: 144.390 },
+    { id: 'cl', label: 'Chile',         freq: 144.390 },
+    { id: 'id', label: 'Indonesia',     freq: 144.390 },
+    { id: 'my', label: 'Malaysia',      freq: 144.390 },
+    { id: 'th', label: 'Thailand',      freq: 144.390 },
+    { id: 'eu', label: 'Europe',        freq: 144.800 },
+    { id: 'za', label: 'South Africa',  freq: 144.800 },
+    { id: 'ru', label: 'Russia',        freq: 144.800 },
+    { id: 'au', label: 'Australia',     freq: 145.175 },
+    { id: 'nz', label: 'New Zealand',   freq: 144.575 },
+    { id: 'jp', label: 'Japan',         freq: 144.660 },
+    { id: 'cn', label: 'China',         freq: 144.640 },
+    { id: 'br', label: 'Brazil',        freq: 145.570 },
+    { id: 'ar', label: 'Argentina',     freq: 144.930 },
+    { id: 'uy', label: 'Uruguay',       freq: 144.930 }
+  ],
+
+  // Suggested APRS digipeater paths for the regional default. NOGATE/RFONLY are
+  // APRS path tokens (not digipeater callsigns); DIRECT is an empty path.
+  APRS_PATHS: [
+    { id: 'wide',   label: 'WIDE1-1, WIDE2-1', via1: 'WIDE1',  via1SSID: 1, via2: 'WIDE2', via2SSID: 1, note: 'Standard path via fill-in and wide digipeaters.' },
+    { id: 'nogate', label: 'NOGATE',           via1: 'NOGATE', via1SSID: 0, via2: '',      via2SSID: 0, note: 'Digipeated over RF but not forwarded to the internet (aprs.fi).' },
+    { id: 'rfonly', label: 'RFONLY',           via1: 'RFONLY', via1SSID: 0, via2: '',      via2SSID: 0, note: 'Stays strictly on RF; internet gateways drop it.' },
+    { id: 'direct', label: 'DIRECT (no path)', via1: '',       via1SSID: 0, via2: '',      via2SSID: 0, note: 'No digipeating — for high-altitude direct-to-IGate use.' }
+  ],
   
   // DMR ID options for channel override
   DMR_ID_OPTIONS: ['None', 'Override'],
@@ -266,22 +304,52 @@ const CONFIG = {
   DEFAULT_SATELLITES: [
     { catalogueNumber: '43017U', name: 'AO-91',     rx1: 145.960, tx1: 435.250, txCtcss: 67,    armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 145.960, tx3: 0, aprsConfig: '' },
     { catalogueNumber: '61781U', name: 'AO-123',    rx1: 435.400, tx1: 145.850, txCtcss: 67,    armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.210, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '22825U', name: 'AO-27',     rx1: 436.795, tx1: 145.850, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.795, tx3: 0, aprsConfig: '' },
     { catalogueNumber: '40931U', name: 'IO-86',     rx1: 435.880, tx1: 145.880, txCtcss: 88.5,  armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 437.425, tx3: 0, aprsConfig: '' },
-    // ISS (International Space Station) - NORAD 25544 - Uses RS0ISS for APRS digipeating
-    { catalogueNumber: '25544U', name: 'ISS',       rx1: 437.800, tx1: 145.990, txCtcss: 67,    armCtcss: 0,    rx2: 145.825, tx2: 145.825, rx3: 145.800, tx3: 0, aprsConfig: 'RS0ISS' },
+    // ISS (International Space Station) - NORAD 25544 - APRS on 145.825
+    { catalogueNumber: '25544U', name: 'ISS',       rx1: 437.800, tx1: 145.990, txCtcss: 67,    armCtcss: 0,    rx2: 145.825, tx2: 145.825, rx3: 145.800, tx3: 0, aprsConfig: '' },
     { catalogueNumber: '40908U', name: 'LilacSat', rx1: 437.200, tx1: 144.350, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 437.200, tx3: 0, aprsConfig: '' },
-    { catalogueNumber: '62461U', name: 'POEM 4',    rx1: 145.870, tx1: 0,       txCtcss: 0,     armCtcss: 0,    rx2: 145.825, tx2: 145.825, rx3: 145.870, tx3: 0, aprsConfig: '' },
     { catalogueNumber: '43678U', name: 'PO-101',    rx1: 145.900, tx1: 437.500, txCtcss: 141.3, armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 145.900, tx3: 0, aprsConfig: '' },
     { catalogueNumber: '27607U', name: 'SO-50',     rx1: 436.795, tx1: 145.850, txCtcss: 67,    armCtcss: 74.4, rx2: 0,       tx2: 0,       rx3: 436.795, tx3: 0, aprsConfig: '' },
-    { catalogueNumber: '62690U', name: 'SO-124',    rx1: 436.885, tx1: 145.925, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.885, tx3: 0, aprsConfig: '' },
-    { catalogueNumber: '59112U', name: 'SONATE-2', rx1: 145.880, tx1: 0,       txCtcss: 0,     armCtcss: 0,    rx2: 145.825, tx2: 145.825, rx3: 145.840, tx3: 0, aprsConfig: 'DP0SNX' },
-    { catalogueNumber: '57172U', name: 'UmKA-1',    rx1: 437.625, tx1: 0,       txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 437.625, tx3: 0, aprsConfig: '' }
+    // SONATE-2 (DP0SNX): APRS digipeater on 145.825 MHz (up/down) and a sporadic
+    // CW beacon on 145.840 MHz. No voice transponder - 145.880 MHz is the SSTV
+    // downlink and 437.025 MHz is telemetry, so both are left out of the modes.
+    { catalogueNumber: '59112U', name: 'SONATE-2', rx1: 0,       tx1: 0,       txCtcss: 0,     armCtcss: 0,    rx2: 145.825, tx2: 145.825, rx3: 145.840, tx3: 0, aprsConfig: '' },
+    // Tevel2 FM voice constellation (145.970 up / 436.400 down, no CTCSS).
+    // The operator enables the active birds one at a time.
+    { catalogueNumber: '63217U', name: 'TEVEL2-1',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63219U', name: 'TEVEL2-2',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63218U', name: 'TEVEL2-3',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63213U', name: 'TEVEL2-4',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63214U', name: 'TEVEL2-5',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63215U', name: 'TEVEL2-6',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63238U', name: 'TEVEL2-7',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63239U', name: 'TEVEL2-8',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' },
+    { catalogueNumber: '63237U', name: 'TEVEL2-9',  rx1: 436.400, tx1: 145.970, txCtcss: 0,     armCtcss: 0,    rx2: 0,       tx2: 0,       rx3: 436.400, tx3: 0, aprsConfig: '' }
   ],
+
+  // Known satellite APRS digipeater routes, keyed by satellite name (the
+  // firmware looks up an APRS config by a byte-exact match on the satellite
+  // name). `via` is the primary route, `fallback` an alternate to try.
+  APRS_DIGIPEATERS: {
+    'ISS':      { via: 'ARISS',  fallback: 'RS0ISS', note: 'ARISS is the universal ISS alias; RS0ISS is the Russian-module fallback.' },
+    'SONATE-2': { via: 'DP0SNX', fallback: '',       note: 'SONATE-2 only digipeats via DP0SNX.' }
+  },
   
-  // Channel types
+  // Channel types.
+  // The DM32 / UV008 (C7000) firmware adds two analogue modes beyond the
+  // upstream OpenGD77 set; it stores them in the channel `chMode` byte
+  // (see g77.js CH_MODE and the firmware's "FM"/"DMR"/"FM+"/"AM" display
+  // strings):
+  //   chMode 0 = Analogue FM (existing)
+  //   chMode 1 = Digital DMR (existing)
+  //   chMode 2 = FM Broadcast ("FM+")
+  //   chMode 3 = AM (airband)
   CHANNEL_TYPES: {
     ANALOG: 'Analogue',
-    DIGITAL: 'Digital'
+    DIGITAL: 'Digital',
+    FM_BROADCAST: 'FM Broadcast',
+    AM: 'AM'
   },
   
   // Contact types
@@ -370,12 +438,19 @@ const CONFIG = {
     SATELLITE_TLES: 'opengd77_satellite_tles',
     CUSTOM_TLE_SOURCES: 'opengd77_custom_tle_sources',
     RADIO_TYPE: 'opengd77_radio_type',
+    USB_DEVICE: 'opengd77_usb_device',
+    HID_DEVICE: 'opengd77_hid_device',
+    SERIAL_DEVICE: 'opengd77_serial_device',
     LAST_SECTION: 'opengd77_last_section',
     REPEATERS_PAGE_SIZE: 'opengd77_repeaters_page_size',
     REPEATERS_SORT: 'opengd77_repeaters_sort',
     DMR_REPEATERS_PAGE_SIZE: 'opengd77_dmr_repeaters_page_size',
     WTR_PAGE_SIZE: 'opengd77_wtr_page_size',
-    DMR_PAGE_SIZE: 'opengd77_dmr_page_size'
+    DMR_PAGE_SIZE: 'opengd77_dmr_page_size',
+    CHANNEL_COLUMNS: 'opengd77_channel_columns',
+    CHANNEL_SORT: 'opengd77_channel_sort',
+    APRS_REGION: 'opengd77_aprs_region',
+    APRS_PATH_PRESET: 'opengd77_aprs_path'
   },
   
   // Cache durations (ms)
@@ -415,6 +490,12 @@ Object.freeze(CONFIG.PROTOCOL.COMMAND);
 Object.freeze(CONFIG.LIMITS);
 Object.freeze(CONFIG.DEFAULT_SATELLITES);
 CONFIG.DEFAULT_SATELLITES.forEach(sat => Object.freeze(sat));
+Object.freeze(CONFIG.APRS_DIGIPEATERS);
+Object.keys(CONFIG.APRS_DIGIPEATERS).forEach(key => Object.freeze(CONFIG.APRS_DIGIPEATERS[key]));
+Object.freeze(CONFIG.APRS_REGIONS);
+CONFIG.APRS_REGIONS.forEach(region => Object.freeze(region));
+Object.freeze(CONFIG.APRS_PATHS);
+CONFIG.APRS_PATHS.forEach(path => Object.freeze(path));
 Object.freeze(CONFIG.TLE_SOURCES);
 Object.keys(CONFIG.TLE_SOURCES).forEach(key => Object.freeze(CONFIG.TLE_SOURCES[key]));
 Object.freeze(CONFIG.CHANNEL_TYPES);

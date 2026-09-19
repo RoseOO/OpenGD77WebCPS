@@ -2,7 +2,7 @@
  * OpenGD77 CPS (standalone) Service Worker
  * Provides offline capability and caching for the standalone CPS web app.
  *
- * IMPORTANT: keep CACHE_NAME in sync with CACHE_VERSION.
+ * IMPORTANT: keep CACHE_NAME in sync with CACHE_VERSION at the deploy root.
  *
  * Strategy:
  * - Navigations are network-first so a freshly deployed index.html (with new
@@ -12,15 +12,17 @@
  *   CACHE_NAME is bumped on release.
  */
 
-const CACHE_NAME = 'opengd77-cps-v44';
+const CACHE_NAME = 'opengd77-oss-cps-v80';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/css/styles.css',
   '/js/app.js',
+  '/js/radio-settings-ui.js',
   '/js/api.js',
   '/js/codeplug.js',
   '/js/config.js',
+  '/js/settings.js',
   '/js/theme-init.js',
   '/js/g77.js',
   '/js/mk22_cipher.js',
@@ -65,7 +67,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((name) => name.startsWith('opengd77-cps-') && name !== CACHE_NAME)
+          .filter((name) => name.startsWith('opengd77-oss-cps-') && name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       )
     ).then(() => self.clients.claim())

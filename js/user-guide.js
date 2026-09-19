@@ -7,10 +7,10 @@ let userGuideObserver = null;
 // sanitise its output, and the result is injected via innerHTML, so untrusted
 // markdown could otherwise execute script in the app origin.
 const USER_GUIDE_ALLOWED_TAGS = new Set([
-  'A','P','BR','HR','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE',
-  'PRE','CODE','SPAN','DIV','STRONG','EM','B','I','U','S','DEL','SUB','SUP',
-  'TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','CAPTION','IMG','FIGURE',
-  'FIGCAPTION','DL','DT','DD'
+  'a','p','br','hr','h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote',
+  'pre','code','span','div','strong','em','b','i','u','s','del','sub','sup',
+  'table','thead','tbody','tfoot','tr','th','td','caption','img','figure',
+  'figcaption','dl','dt','dd'
 ]);
 const USER_GUIDE_ALLOWED_ATTRS = {
   '*': new Set(['class','id','title','align']),
@@ -35,7 +35,10 @@ function sanitizeUserGuideHtml(html) {
   const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
   const toRemove = [];
-  let node = walker.currentNode;
+  // Start at the first descendant, not the walker root: the root is <body>,
+  // which is not in the allow-list, and removing it would detach the document
+  // body so the `doc.body.innerHTML` return below would throw.
+  let node = walker.nextNode();
   while (node) {
     const tag = node.tagName.toLowerCase();
     if (!USER_GUIDE_ALLOWED_TAGS.has(tag)) {
@@ -61,6 +64,27 @@ function sanitizeUserGuideHtml(html) {
   return doc.body.innerHTML;
 }
 
+// GitHub-compatible heading slug, with duplicate suffixes (-1, -2, ...) so the
+// markdown Table of Contents anchors resolve. `marked` does not emit IDs.
+function githubSlug(text, slugCounts) {
+  let slug = String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\- ]/g, '')
+    .replace(/ /g, '-');
+  if (!slug) slug = 'section';
+  if (slugCounts) {
+    if (slugCounts.has(slug)) {
+      const n = slugCounts.get(slug) + 1;
+      slugCounts.set(slug, n);
+      slug = slug + '-' + n;
+    } else {
+      slugCounts.set(slug, 0);
+    }
+  }
+  return slug;
+}
+
 // Transform content into collapsible sections
 function createCollapsibleSections(contentEl) {
   const children = Array.from(contentEl.children);
@@ -68,6 +92,7 @@ function createCollapsibleSections(contentEl) {
   let currentSection = null;
   let currentSectionContent = null;
   let sectionIndex = 0;
+  const slugCounts = new Map();
   
   children.forEach(child => {
     const tagName = child.tagName.toLowerCase();
@@ -81,8 +106,7 @@ function createCollapsibleSections(contentEl) {
       
       // Create new collapsible section
       const sectionId = 'guide-section-' + sectionIndex;
-      const baseHeaderId = child.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const headerId = child.id || baseHeaderId + '-' + sectionIndex;
+      const headerId = child.id || githubSlug(child.textContent, slugCounts);
       sectionIndex++;
       
       currentSection = document.createElement('div');
@@ -122,7 +146,12 @@ function createCollapsibleSections(contentEl) {
       });
     } else if (currentSectionContent) {
       // Add content to current section
-      currentSectionContent.appendChild(child.cloneNode(true));
+      const clone = child.cloneNode(true);
+      const cloneTag = clone.tagName ? clone.tagName.toLowerCase() : '';
+      if (/^h[3-6]$/.test(cloneTag) && !clone.id) {
+        clone.id = githubSlug(clone.textContent, slugCounts);
+      }
+      currentSectionContent.appendChild(clone);
     } else {
       // Content before any section header (like intro content)
       newContent.appendChild(child.cloneNode(true));
@@ -143,6 +172,37 @@ function createCollapsibleSections(contentEl) {
   if (firstH1Section) {
     toggleSection(firstH1Section, true);
   }
+}
+
+function normalizeGuideText(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+// Point the in-page Table of Contents links at the generated anchors. Even if a
+// slug differs from the markdown's, matching on link/heading text keeps them
+// working.
+function remapGuideTocLinks(contentEl) {
+  const targets = [];
+  contentEl.querySelectorAll('.guide-section-header').forEach(el => {
+    const title = el.querySelector('.guide-section-title');
+    targets.push({ text: title ? title.textContent : el.textContent, el });
+  });
+  contentEl.querySelectorAll('h3, h4, h5, h6').forEach(el => {
+    targets.push({ text: el.textContent, el });
+  });
+
+  contentEl.querySelectorAll('a[href^="#"]').forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href || href === '#') return;
+    const anchor = decodeURIComponent(href.slice(1));
+    const linkText = normalizeGuideText(link.textContent);
+    const target = targets.find(t => t.el.id && t.el.id === anchor)
+      || targets.find(t => normalizeGuideText(t.text) === linkText);
+    if (target) {
+      if (!target.el.id) target.el.id = githubSlug(target.text, null);
+      link.setAttribute('href', '#' + target.el.id);
+    }
+  });
 }
 
 // Toggle a collapsible section
@@ -442,6 +502,7 @@ async function loadUserGuide() {
     
     // Transform into collapsible sections
     createCollapsibleSections(contentEl);
+    remapGuideTocLinks(contentEl);
     
     // Fix anchor links to scroll within page
     fixAnchorLinks(contentEl);
@@ -517,8 +578,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sectionLink) {
       e.preventDefault();
       const sectionId = sectionLink.dataset.section;
-      if (window.ui && typeof window.ui.showSection === 'function') {
-        window.ui.showSection(sectionId);
+      const ui = window.UI || window.ui;
+      if (ui && typeof ui.showSection === 'function') {
+        ui.showSection(sectionId);
       }
     }
   });

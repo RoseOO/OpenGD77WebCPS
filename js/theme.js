@@ -244,6 +244,13 @@ const Theme = {
       }
       
       const buffer = await response.arrayBuffer();
+      // A theme that does not exist on a case-sensitive server (Linux/nginx) can
+      // still return 200 with the SPA HTML fallback, so validate the size instead
+      // of trusting the response. Anything that is not exactly one theme block is
+      // treated as "not found" and skipped by the caller.
+      if (buffer.byteLength !== this.THEME_SIZE) {
+        throw new Error(`not a theme file (${buffer.byteLength} bytes)`);
+      }
       return this.parseGTM(new Uint8Array(buffer));
     } catch (error) {
       console.error('Error loading bundled theme:', error);

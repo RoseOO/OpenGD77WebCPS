@@ -73,6 +73,7 @@ const UI = {
     step('bindFileInputs', this.bindFileInputs);
     step('bindGeneralSettings', this.bindGeneralSettings);
     step('bindBootSettingsEvents', this.bindBootSettingsEvents);
+    step('initChannelColumnPicker', this.initChannelColumnPicker);
     step('restoreLastSection', this.restoreLastSection);
     step('updateOverview', this.updateOverview);
     step('updateUIForRadioType', this.updateUIForRadioType);
@@ -285,6 +286,12 @@ const UI = {
         break;
       case 'radio-tools':
         this.bindRadioTools();
+        break;
+      case 'radio-settings':
+        if (window.RadioSettingsUI) window.RadioSettingsUI.renderEditor();
+        break;
+      case 'clone-radio':
+        if (window.RadioSettingsUI) window.RadioSettingsUI.renderClone();
         break;
       case 'shared-library':
         App.loadSharedLibraryPage();
@@ -622,6 +629,21 @@ const UI = {
     document.getElementById('groupByZoneBtn')?.addEventListener('click', () => {
       this.toggleChannelGroupByZone();
     });
+
+    // Channels: column picker + sortable headers
+    document.getElementById('channelColumnsBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleChannelColumnsMenu();
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#channelColumnsPicker')) this.toggleChannelColumnsMenu(false);
+    });
+    const channelSortClick = (e) => {
+      const th = e.target.closest('th.sortable');
+      if (th && th.dataset.sort) this.toggleChannelSort(th.dataset.sort);
+    };
+    document.getElementById('channelsTable')?.addEventListener('click', channelSortClick);
+    document.getElementById('channelsGroupedByZone')?.addEventListener('click', channelSortClick);
     
     // Load DMR DB from a local CSV file
     document.getElementById('downloadDMRDBBtn')?.addEventListener('click', () => {
@@ -748,7 +770,10 @@ const UI = {
     
     // Satellite buttons
     document.getElementById('loadDefaultSatsBtn')?.addEventListener('click', () => {
-      this.loadDefaultSatellites();
+      this.showLoadDefaultsModal();
+    });
+    document.getElementById('clearSatellitesBtn')?.addEventListener('click', () => {
+      this.clearSatellites();
     });
     
     document.getElementById('updateTLEsBtn')?.addEventListener('click', () => {
@@ -1651,6 +1676,168 @@ const UI = {
   /**
    * Render channels table
    */
+  // Selectable channels-table columns. `def` = shown by default (the previous
+  // fixed set); the rest are opt-in. `value` is used for sorting.
+  CHANNEL_COLUMN_DEFS: [
+    { key: 'name', label: 'Name', def: true, sortable: true, value: (ch) => ch.name || '', cell: (ch) => `<td>${Utils.escapeHtml(ch.name)}</td>` },
+    { key: 'type', label: 'Type', def: true, sortable: true, value: (ch) => UI.channelModeAbbrev(ch), cell: (ch) => `<td><span class="channel-type ${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'digital' : 'analog'}">${UI.channelModeAbbrev(ch)}</span></td>` },
+    { key: 'rxFreq', label: 'RX Freq', def: true, sortable: true, value: (ch) => Number(ch.rxFreq) || 0, cell: (ch) => `<td>${Utils.formatFrequency(ch.rxFreq)}</td>` },
+    { key: 'txFreq', label: 'TX Freq', def: true, sortable: true, value: (ch) => Number(ch.txFreq) || 0, cell: (ch) => `<td>${Utils.formatFrequency(ch.txFreq)}</td>` },
+    { key: 'ccTone', label: 'CC/Tone', def: true, sortable: true, value: (ch) => (ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? Number(ch.colorCode) || 0 : (ch.txTone || '')), cell: (ch) => `<td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? `CC${ch.colorCode}` : (ch.txTone !== 'None' ? ch.txTone : '-')}</td>` },
+    { key: 'ts', label: 'TS', def: true, sortable: true, value: (ch) => Number(ch.timeslot) || 0, cell: (ch) => `<td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? `TS${ch.timeslot}` : '-'}</td>` },
+    { key: 'contact', label: 'Contact', def: true, sortable: true, value: (ch) => ch.contact || '', cell: (ch) => `<td>${ch.contact || '-'}</td>` },
+    { key: 'tgList', label: 'TG List', def: true, sortable: true, value: (ch) => ch.tgList || '', cell: (ch) => `<td>${ch.tgList || '-'}</td>` },
+    { key: 'power', label: 'Power', def: true, sortable: true, value: (ch) => ch.power || '', cell: (ch) => `<td>${ch.power}</td>` },
+    { key: 'bandwidth', label: 'BW', def: false, sortable: true, value: (ch) => Number(ch.bandwidth) || 0, cell: (ch) => `<td>${ch.bandwidth ? `${ch.bandwidth} kHz` : '-'}</td>` },
+    { key: 'dmrId', label: 'DMR ID', def: false, sortable: true, value: (ch) => String(ch.dmrId || ''), cell: (ch) => `<td>${Utils.escapeHtml(String(ch.dmrId || '-'))}</td>` },
+    { key: 'overrideDmrId', label: 'Override ID', def: false, sortable: true, value: (ch) => String(ch.overrideDmrId || ''), cell: (ch) => `<td>${ch.overrideDmrId || '-'}</td>` },
+    { key: 'rxTone', label: 'RX Tone', def: false, sortable: true, value: (ch) => ch.rxTone || '', cell: (ch) => `<td>${ch.rxTone || '-'}</td>` },
+    { key: 'txTone', label: 'TX Tone', def: false, sortable: true, value: (ch) => ch.txTone || '', cell: (ch) => `<td>${ch.txTone || '-'}</td>` },
+    { key: 'squelch', label: 'Squelch', def: false, sortable: true, value: (ch) => ch.squelch || '', cell: (ch) => `<td>${ch.squelch || '-'}</td>` },
+    { key: 'scanList', label: 'Scan List', def: false, sortable: true, value: (ch) => ch.scanList || '', cell: (ch) => `<td>${ch.scanList || '-'}</td>` },
+    { key: 'tot', label: 'TOT', def: false, sortable: true, value: (ch) => ch.tot || '', cell: (ch) => `<td>${ch.tot || '-'}</td>` },
+    { key: 'vox', label: 'VOX', def: false, sortable: true, value: (ch) => ch.vox || '', cell: (ch) => `<td>${ch.vox || '-'}</td>` },
+    { key: 'rxOnly', label: 'RX Only', def: false, sortable: true, value: (ch) => ch.rxOnly ? 1 : 0, cell: (ch) => `<td>${ch.rxOnly ? 'Yes' : 'No'}</td>` },
+    { key: 'zoneSkip', label: 'Zone Skip', def: false, sortable: true, value: (ch) => ch.zoneSkip ? 1 : 0, cell: (ch) => `<td>${ch.zoneSkip ? 'Yes' : 'No'}</td>` },
+    { key: 'allSkip', label: 'All Skip', def: false, sortable: true, value: (ch) => ch.allSkip ? 1 : 0, cell: (ch) => `<td>${ch.allSkip ? 'Yes' : 'No'}</td>` },
+    { key: 'noBeep', label: 'No Beep', def: false, sortable: true, value: (ch) => ch.noBeep ? 1 : 0, cell: (ch) => `<td>${ch.noBeep ? 'Yes' : 'No'}</td>` },
+    { key: 'noEco', label: 'No Eco', def: false, sortable: true, value: (ch) => ch.noEco ? 1 : 0, cell: (ch) => `<td>${ch.noEco ? 'Yes' : 'No'}</td>` },
+    { key: 'talkerAlias', label: 'Talker Alias', def: false, sortable: true, value: (ch) => `${ch.ts1TalkerAliasTx || ''}/${ch.ts2TalkerAliasTx || ''}`, cell: (ch) => `<td>${ch.ts1TalkerAliasTx || '-'} / ${ch.ts2TalkerAliasTx || '-'}</td>` },
+    { key: 'aprs', label: 'APRS', def: false, sortable: true, value: (ch) => ch.aprs || '', cell: (ch) => `<td>${ch.aprs || '-'}</td>` },
+    { key: 'latLon', label: 'Lat, Lon', def: false, sortable: true, value: (ch) => ch.useLocation ? `${ch.latitude},${ch.longitude}` : '', cell: (ch) => `<td>${ch.useLocation ? `${ch.latitude}, ${ch.longitude}` : '-'}</td>` }
+  ],
+
+  _channelColumnDefs() { return this.CHANNEL_COLUMN_DEFS || []; },
+  _channelDefaultKeys() { return this._channelColumnDefs().filter(d => d.def).map(d => d.key); },
+  _channelVisibleKeys() {
+    const saved = Utils.storage.get(CONFIG.STORAGE.CHANNEL_COLUMNS, null);
+    const valid = new Set(this._channelColumnDefs().map(d => d.key));
+    const keys = Array.isArray(saved) ? saved.filter(k => valid.has(k)) : null;
+    return new Set(keys && keys.length ? keys : this._channelDefaultKeys());
+  },
+  _channelSortState() {
+    if (this._channelSort === undefined) {
+      this._channelSort = Utils.storage.get(CONFIG.STORAGE.CHANNEL_SORT, null) || null;
+    }
+    return this._channelSort;
+  },
+
+  _sortedChannels(channels) {
+    const s = this._channelSortState();
+    const def = s && s.key ? this._channelColumnDefs().find(d => d.key === s.key) : null;
+    if (!def) return [...channels];
+    const dir = s.dir === 'desc' ? -1 : 1;
+    return [...channels].sort((a, b) => {
+      const va = def.value(a);
+      const vb = def.value(b);
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), undefined, { numeric: true }) * dir;
+    });
+  },
+
+  _channelColumnHead() {
+    const visible = this._channelVisibleKeys();
+    const sort = this._channelSortState();
+    const ths = ['<th>#</th>'];
+    for (const d of this._channelColumnDefs()) {
+      if (!visible.has(d.key)) continue;
+      const active = sort && sort.key === d.key;
+      const cls = d.sortable ? `sortable${active ? (sort.dir === 'desc' ? ' sort-desc' : ' sort-asc') : ''}` : '';
+      const icon = d.sortable ? ` <span class="sort-icon">${active ? (sort.dir === 'desc' ? '▼' : '▲') : ''}</span>` : '';
+      ths.push(`<th${cls ? ` class="${cls}"` : ''}${d.sortable ? ` data-sort="${d.key}"` : ''}>${d.label}${icon}</th>`);
+    }
+    ths.push('<th>Actions</th>');
+    return `<tr>${ths.join('')}</tr>`;
+  },
+
+  _channelActionButtons(ch, allowMove) {
+    let h = '';
+    if (allowMove) {
+      h += `<button class="action-btn" onclick="UI.moveChannel('${ch.id}', -1)" title="Move Up"><i class="mdi mdi-arrow-up"></i></button>`;
+      h += `<button class="action-btn" onclick="UI.moveChannel('${ch.id}', 1)" title="Move Down"><i class="mdi mdi-arrow-down"></i></button>`;
+    }
+    h += `<button class="action-btn" onclick="UI.swapChannelFreqs('${ch.id}')" title="Swap TX/RX"><i class="mdi mdi-swap-horizontal"></i></button>`;
+    h += `<button class="action-btn" onclick="UI.editChannel('${ch.id}')" title="Edit"><i class="mdi mdi-pencil"></i></button>`;
+    h += `<button class="action-btn danger" onclick="UI.deleteChannel('${ch.id}')" title="Delete"><i class="mdi mdi-delete"></i></button>`;
+    return h;
+  },
+
+  _channelColumnCells(ch, ctx) {
+    const visible = this._channelVisibleKeys();
+    const cells = [];
+    cells.push(ctx === 'main'
+      ? `<td class="drag-handle" title="Drag to reorder"><i class="mdi mdi-drag-vertical"></i><span class="channel-number" onclick="UI.showMoveChannelDialog('${ch.id}', ${ch.number})" title="Click to move to position">${ch.number}</span></td>`
+      : `<td class="drag-handle" title="Drag to reorder within zone"><i class="mdi mdi-drag-vertical"></i><span class="channel-number">${ch.number}</span></td>`);
+    for (const d of this._channelColumnDefs()) {
+      if (visible.has(d.key)) cells.push(d.cell(ch));
+    }
+    cells.push(`<td class="actions">${this._channelActionButtons(ch, ctx === 'main')}</td>`);
+    return cells.join('');
+  },
+
+  toggleChannelSort(key) {
+    const cur = this._channelSortState();
+    const wasSorted = !!(cur && cur.key);
+    if (!cur || cur.key !== key) this._channelSort = { key, dir: 'asc' };
+    else if (cur.dir === 'asc') this._channelSort = { key, dir: 'desc' };
+    else this._channelSort = null; // third click returns to manual order
+    if (this._channelSort) Utils.storage.set(CONFIG.STORAGE.CHANNEL_SORT, this._channelSort);
+    else Utils.storage.remove(CONFIG.STORAGE.CHANNEL_SORT);
+    if (this._channelSort && !wasSorted) {
+      const def = this._channelColumnDefs().find(d => d.key === key);
+      Utils.toast(`Sorted by ${def ? def.label : key}`, 'info');
+    } else if (!this._channelSort && wasSorted) {
+      Utils.toast('Manual channel order restored', 'info');
+    }
+    const q = document.getElementById('channelSearch')?.value || '';
+    this.renderChannelsTable(q);
+    if (this.channelGroupByZone) this.renderChannelsGroupedByZone(q);
+  },
+
+  setChannelColumns(keys) {
+    Utils.storage.set(CONFIG.STORAGE.CHANNEL_COLUMNS, keys);
+    const q = document.getElementById('channelSearch')?.value || '';
+    this.renderChannelsTable(q);
+    if (this.channelGroupByZone) this.renderChannelsGroupedByZone(q);
+  },
+
+  resetChannelColumns() {
+    Utils.storage.remove(CONFIG.STORAGE.CHANNEL_COLUMNS);
+    this.initChannelColumnPicker();
+    const q = document.getElementById('channelSearch')?.value || '';
+    this.renderChannelsTable(q);
+    if (this.channelGroupByZone) this.renderChannelsGroupedByZone(q);
+  },
+
+  initChannelColumnPicker() {
+    const menu = document.getElementById('channelColumnsMenu');
+    if (!menu) return;
+    const visible = this._channelVisibleKeys();
+    menu.innerHTML = this._channelColumnDefs().map(d => `
+      <label><input type="checkbox" data-col="${d.key}" ${visible.has(d.key) ? 'checked' : ''}> ${d.label}</label>
+    `).join('') + '<button type="button" class="btn btn-sm btn-secondary column-picker-reset" id="channelColumnsReset">Reset to defaults</button>';
+    menu.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const keys = [...menu.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.dataset.col);
+        if (keys.length === 0) {
+          cb.checked = true;
+          Utils.toast('Keep at least one column visible', 'warning');
+          return;
+        }
+        this.setChannelColumns(keys);
+      });
+    });
+    document.getElementById('channelColumnsReset')?.addEventListener('click', () => this.resetChannelColumns());
+  },
+
+  toggleChannelColumnsMenu(force) {
+    const menu = document.getElementById('channelColumnsMenu');
+    if (!menu) return;
+    const open = force != null ? force : !menu.classList.contains('open');
+    menu.classList.toggle('open', open);
+    if (open) this.initChannelColumnPicker();
+  },
+
   renderChannelsTable(filter = '') {
     if (this.channelGroupByZone) {
       this.renderChannelsGroupedByZone(filter);
@@ -1678,45 +1865,17 @@ const UI = {
       empty.style.display = '';
       return;
     }
-    
+
     table.style.display = '';
     empty.style.display = 'none';
-    
-    tbody.innerHTML = channels.map(ch => `
+
+    const thead = table.querySelector('thead');
+    if (thead) thead.innerHTML = this._channelColumnHead();
+
+    const sorted = this._sortedChannels(channels);
+    tbody.innerHTML = sorted.map(ch => `
       <tr data-id="${ch.id}" data-number="${ch.number}" draggable="true" ondragstart="UI.handleDragStart(event)" ondragover="UI.handleDragOver(event)" ondrop="UI.handleDrop(event)" ondragend="UI.handleDragEnd(event)">
-        <td class="drag-handle" title="Drag to reorder">
-          <i class="mdi mdi-drag-vertical"></i>
-          <span class="channel-number" onclick="UI.showMoveChannelDialog('${ch.id}', ${ch.number})" title="Click to move to position">${ch.number}</span>
-        </td>
-        <td>${Utils.escapeHtml(ch.name)}</td>
-        <td>
-          <span class="channel-type ${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'digital' : 'analog'}">
-            ${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'DMR' : 'FM'}
-          </span>
-        </td>
-        <td>${Utils.formatFrequency(ch.rxFreq)}</td>
-        <td>${Utils.formatFrequency(ch.txFreq)}</td>
-        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? `CC${ch.colorCode}` : (ch.txTone !== 'None' ? ch.txTone : '-')}</td>
-        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? `TS${ch.timeslot}` : '-'}</td>
-        <td>${ch.contact || '-'}</td>
-        <td>${ch.power}</td>
-        <td class="actions">
-          <button class="action-btn" onclick="UI.moveChannel('${ch.id}', -1)" title="Move Up">
-            <i class="mdi mdi-arrow-up"></i>
-          </button>
-          <button class="action-btn" onclick="UI.moveChannel('${ch.id}', 1)" title="Move Down">
-            <i class="mdi mdi-arrow-down"></i>
-          </button>
-          <button class="action-btn" onclick="UI.swapChannelFreqs('${ch.id}')" title="Swap TX/RX">
-            <i class="mdi mdi-swap-horizontal"></i>
-          </button>
-          <button class="action-btn" onclick="UI.editChannel('${ch.id}')" title="Edit">
-            <i class="mdi mdi-pencil"></i>
-          </button>
-          <button class="action-btn danger" onclick="UI.deleteChannel('${ch.id}')" title="Delete">
-            <i class="mdi mdi-delete"></i>
-          </button>
-        </td>
+        ${this._channelColumnCells(ch, 'main')}
       </tr>
     `).join('');
   },
@@ -1815,35 +1974,10 @@ const UI = {
    * Render a single zone group with collapsible header and channel table
    */
   _renderZoneGroup(zoneId, zoneName, channels, expanded = false) {
-    const rows = channels.map(ch => `
+    const sortActive = !!this._channelSortState();
+    const rows = this._sortedChannels(channels).map(ch => `
       <tr data-id="${ch.id}" data-number="${ch.number}" data-zone="${zoneId}" draggable="true" ondragstart="UI.handleZoneChDragStart(event)" ondragover="UI.handleZoneChDragOver(event)" ondrop="UI.handleZoneChDrop(event)" ondragend="UI.handleZoneChDragEnd(event)">
-        <td class="drag-handle" title="Drag to reorder within zone">
-          <i class="mdi mdi-drag-vertical"></i>
-          <span class="channel-number">${ch.number}</span>
-        </td>
-        <td>${Utils.escapeHtml(ch.name)}</td>
-        <td>
-          <span class="channel-type ${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'digital' : 'analog'}">
-            ${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'DMR' : 'FM'}
-          </span>
-        </td>
-        <td>${Utils.formatFrequency(ch.rxFreq)}</td>
-        <td>${Utils.formatFrequency(ch.txFreq)}</td>
-        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'CC' + ch.colorCode : (ch.txTone !== 'None' ? ch.txTone : '-')}</td>
-        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'TS' + ch.timeslot : '-'}</td>
-        <td>${ch.contact || '-'}</td>
-        <td>${ch.power}</td>
-        <td class="actions">
-          <button class="action-btn" onclick="UI.swapChannelFreqs('${ch.id}')" title="Swap TX/RX">
-            <i class="mdi mdi-swap-horizontal"></i>
-          </button>
-          <button class="action-btn" onclick="UI.editChannel('${ch.id}')" title="Edit">
-            <i class="mdi mdi-pencil"></i>
-          </button>
-          <button class="action-btn danger" onclick="UI.deleteChannel('${ch.id}')" title="Delete">
-            <i class="mdi mdi-delete"></i>
-          </button>
-        </td>
+        ${this._channelColumnCells(ch, 'zone')}
       </tr>
     `).join('');
 
@@ -1856,12 +1990,7 @@ const UI = {
         </div>
         <div class="zone-group-body" style="display:${expanded ? 'block' : 'none'}">
           <table class="data-table zone-group-table">
-            <thead>
-              <tr>
-                <th>#</th><th>Name</th><th>Type</th><th>RX Freq</th><th>TX Freq</th>
-                <th>CC/Tone</th><th>TS</th><th>Contact</th><th>Power</th><th>Actions</th>
-              </tr>
-            </thead>
+            <thead>${this._channelColumnHead()}</thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -1883,6 +2012,10 @@ const UI = {
   _zoneChDraggedElement: null,
 
   handleZoneChDragStart(event) {
+    if (this._channelSortState()) {
+      this._channelSort = null;
+      Utils.storage.remove(CONFIG.STORAGE.CHANNEL_SORT);
+    }
     this._zoneChDraggedElement = event.target.closest('tr');
     this._zoneChDraggedElement.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -1972,7 +2105,15 @@ const UI = {
       window.codeplug.createChannel();
     
     const isEdit = !!channelId;
-    
+
+    // AM and FM Broadcast codeplug modes (chMode 2/3) are only understood by the
+    // DM-32 / UV008 (C7000) firmware. Show the options only when that platform
+    // is selected, but always keep an option present if the channel already uses
+    // one so opening/saving the editor can't silently downgrade it.
+    const showDm32Modes = this.supportsDm32AnalogModes() ||
+      channel.type === CONFIG.CHANNEL_TYPES.AM ||
+      channel.type === CONFIG.CHANNEL_TYPES.FM_BROADCAST;
+
     const contactOptions = window.codeplug.contacts.map(c => 
       `<option value="${Utils.escapeHtml(c.name)}" ${channel.contact === c.name ? 'selected' : ''}>${Utils.escapeHtml(c.name)}</option>`
     ).join('');
@@ -1994,8 +2135,11 @@ const UI = {
         <div class="form-group">
           <label class="form-label">Type</label>
           <select class="form-select" id="editChannelType" onchange="UI.toggleChannelTypeFields()">
-            <option value="Analogue" ${channel.type === CONFIG.CHANNEL_TYPES.ANALOG ? 'selected' : ''}>Analog (FM)</option>
-            <option value="Digital" ${channel.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'selected' : ''}>Digital (DMR)</option>
+            <option value="${CONFIG.CHANNEL_TYPES.ANALOG}" ${channel.type === CONFIG.CHANNEL_TYPES.ANALOG ? 'selected' : ''}>Analog (FM)</option>
+            <option value="${CONFIG.CHANNEL_TYPES.DIGITAL}" ${channel.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'selected' : ''}>Digital (DMR)</option>
+            ${showDm32Modes ? `
+            <option value="${CONFIG.CHANNEL_TYPES.AM}" ${channel.type === CONFIG.CHANNEL_TYPES.AM ? 'selected' : ''}>AM (airband) &mdash; DM-32 only</option>
+            <option value="${CONFIG.CHANNEL_TYPES.FM_BROADCAST}" ${channel.type === CONFIG.CHANNEL_TYPES.FM_BROADCAST ? 'selected' : ''}>FM Broadcast &mdash; DM-32 only</option>` : ''}
           </select>
         </div>
       </div>
@@ -2019,7 +2163,7 @@ const UI = {
         </button>
       </div>
       
-      <div id="analogFields" style="display: ${channel.type === CONFIG.CHANNEL_TYPES.ANALOG ? '' : 'none'}">
+      <div id="analogFields" style="display: ${channel.type !== CONFIG.CHANNEL_TYPES.DIGITAL ? '' : 'none'}">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Bandwidth</label>
@@ -2218,7 +2362,8 @@ const UI = {
       
       <div class="form-row">
         <div class="form-group">
-          <label><input type="checkbox" id="editChannelUseLocation" ${channel.useLocation ? 'checked' : ''} onchange="UI.toggleLocationFields()"> Use GPS Location</label>
+          <label><input type="checkbox" id="editChannelUseLocation" ${channel.useLocation ? 'checked' : ''} onchange="UI.toggleLocationFields()"> Use Location</label>
+          <small class="form-help">Stores this channel's own coordinates, used for distance sorting, roaming and bearing. The APRS position comes from the APRS config ("Use Fixed Position") or GPS — set on the radio under APRS Options &gt; Location.</small>
         </div>
       </div>
       
@@ -2280,17 +2425,20 @@ const UI = {
    */
   toggleChannelTypeFields() {
     const type = document.getElementById('editChannelType').value;
-    document.getElementById('analogFields').style.display = type === 'Analogue' ? '' : 'none';
-    document.getElementById('digitalFields').style.display = type === 'Digital' ? '' : 'none';
+    // Analogue, AM and FM Broadcast all use the analogue fields; only Digital
+    // (DMR) uses the digital fields.
+    const isDigital = type === CONFIG.CHANNEL_TYPES.DIGITAL;
+    document.getElementById('analogFields').style.display = isDigital ? 'none' : '';
+    document.getElementById('digitalFields').style.display = isDigital ? '' : 'none';
     // Show/hide Force DMO fields for digital channels
     const dmoFields = document.getElementById('digitalDmoFields');
     if (dmoFields) {
-      dmoFields.style.display = type === 'Digital' ? '' : 'none';
+      dmoFields.style.display = isDigital ? '' : 'none';
     }
     // Show/hide Talker Alias fields for digital channels
     const taFields = document.getElementById('digitalTaFields');
     if (taFields) {
-      taFields.style.display = type === 'Digital' ? '' : 'none';
+      taFields.style.display = isDigital ? '' : 'none';
     }
   },
 
@@ -3013,6 +3161,11 @@ const UI = {
    * Move channel up or down
    */
   moveChannel(channelId, direction) {
+    // Moving by hand works on the manual order - drop any active sort first.
+    if (this._channelSortState()) {
+      this._channelSort = null;
+      Utils.storage.remove(CONFIG.STORAGE.CHANNEL_SORT);
+    }
     const channels = window.codeplug.channels;
     const index = channels.findIndex(c => c.id === channelId);
     if (index === -1) return;
@@ -3099,6 +3252,12 @@ const UI = {
    * Handle drag start
    */
   handleDragStart(event) {
+    // Dragging always sets the manual order, so drop any active sort first.
+    if (this._channelSortState()) {
+      this._channelSort = null;
+      Utils.storage.remove(CONFIG.STORAGE.CHANNEL_SORT);
+      Utils.toast('Sort cleared - dragging sets the manual order', 'info');
+    }
     this.draggedElement = event.target.closest('tr');
     this.draggedElement.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -4824,6 +4983,7 @@ const UI = {
     const tbody = document.getElementById('aprsTableBody');
     const empty = document.getElementById('aprsEmpty');
     const table = document.getElementById('aprsTable');
+    this._initAprsRegionControl();
     
     if (window.codeplug.aprs.length === 0) {
       table.style.display = 'none';
@@ -4838,13 +4998,18 @@ const UI = {
       const iconIdx = a.iconIndex !== undefined ? a.iconIndex : (a.icon || 0);
       const iconChar = iconIdx >= 0 && iconIdx < 94 ? String.fromCharCode(33 + iconIdx) : '?';
       const tableChar = a.iconTable === 1 ? '\\' : '/';
+      const viaPath = [
+        a.via1 ? `${a.via1}-${a.via1SSID !== undefined ? a.via1SSID : (a.via1Ssid || 0)}` : '',
+        a.via2 ? `${a.via2}-${a.via2SSID !== undefined ? a.via2SSID : (a.via2Ssid || 0)}` : ''
+      ].filter(Boolean).join(', ') || 'DIRECT';
       return `
       <tr data-id="${a.id}">
         <td>${Utils.escapeHtml(a.name)}</td>
         <td>${a.ssid}</td>
-        <td>${a.via1}-${a.via1SSID !== undefined ? a.via1SSID : (a.via1Ssid || 0)}, ${a.via2}-${a.via2SSID !== undefined ? a.via2SSID : (a.via2Ssid || 0)}</td>
+        <td>${Utils.escapeHtml(viaPath)}</td>
         <td><span style="font-family:monospace;font-size:1.1em;" title="Table: ${tableChar}">${tableChar}${Utils.escapeHtml(iconChar)}</span></td>
         <td>${Utils.escapeHtml(a.comment)}</td>
+        <td>${a.txFreq ? Utils.escapeHtml(String(a.txFreq)) : '-'}</td>
         <td class="actions">
           <button class="action-btn" onclick="UI.editAPRS('${a.id}')" title="Edit">
             <i class="mdi mdi-pencil"></i>
@@ -4855,6 +5020,99 @@ const UI = {
         </td>
       </tr>
     `}).join('');
+  },
+
+  /**
+   * Populate the regional APRS default control (idempotent).
+   */
+  _initAprsRegionControl() {
+    const sel = document.getElementById('aprsRegionSelect');
+    const pathSel = document.getElementById('aprsPathPreset');
+    if (!sel || sel.dataset.ready) return;
+    const regions = CONFIG.APRS_REGIONS || [];
+    sel.innerHTML = regions.map(r => `<option value="${Utils.escapeHtml(r.id)}">${Utils.escapeHtml(r.label)} — ${r.freq.toFixed(3)} MHz</option>`).join('');
+    const savedRegion = Utils.storage.get(CONFIG.STORAGE.APRS_REGION);
+    if (savedRegion && regions.some(r => r.id === savedRegion)) sel.value = savedRegion;
+
+    const paths = CONFIG.APRS_PATHS || [];
+    if (pathSel) {
+      pathSel.innerHTML = paths.map(p => `<option value="${Utils.escapeHtml(p.id)}">${Utils.escapeHtml(p.label)}</option>`).join('');
+      const savedPath = Utils.storage.get(CONFIG.STORAGE.APRS_PATH_PRESET);
+      if (savedPath && paths.some(p => p.id === savedPath)) pathSel.value = savedPath;
+      pathSel.addEventListener('change', () => {
+        Utils.storage.set(CONFIG.STORAGE.APRS_PATH_PRESET, pathSel.value);
+        this._updateAprsRegionHint();
+      });
+    }
+
+    sel.dataset.ready = '1';
+    sel.addEventListener('change', () => {
+      Utils.storage.set(CONFIG.STORAGE.APRS_REGION, sel.value);
+      this._updateAprsRegionHint();
+    });
+    const btn = document.getElementById('addDefaultAprsBtn');
+    if (btn) btn.addEventListener('click', () => this.addDefaultAPRSConfig());
+    this._updateAprsRegionHint();
+  },
+
+  _updateAprsRegionHint() {
+    const sel = document.getElementById('aprsRegionSelect');
+    const hint = document.getElementById('aprsRegionHint');
+    if (!sel || !hint) return;
+    const r = (CONFIG.APRS_REGIONS || []).find(x => x.id === sel.value);
+    const pSel = document.getElementById('aprsPathPreset');
+    const p = (CONFIG.APRS_PATHS || []).find(x => x.id === (pSel && pSel.value));
+    if (!r) { hint.textContent = ''; return; }
+    const pathLabel = p ? p.label : 'WIDE1-1, WIDE2-1';
+    hint.textContent = `APRS ${r.freq.toFixed(3)} MHz · ${pathLabel}`;
+    hint.title = (p && p.note) ? p.note : '';
+  },
+
+  /**
+   * Create a starter APRS config for the selected region and digipeater path
+   * (WIDE / NOGATE / RFONLY / DIRECT), 1200 baud, QSY to the regional channel.
+   */
+  addDefaultAPRSConfig() {
+    const sel = document.getElementById('aprsRegionSelect');
+    const region = (CONFIG.APRS_REGIONS || []).find(r => r.id === (sel && sel.value));
+    if (!region) { Utils.toast('Choose a region first', 'warning'); return; }
+    if (window.codeplug.aprs.length >= CONFIG.LIMITS.MAX_APRS_CONFIGS) {
+      Utils.toast(`Maximum ${CONFIG.LIMITS.MAX_APRS_CONFIGS} APRS configs allowed`, 'error');
+      return;
+    }
+    const pSel = document.getElementById('aprsPathPreset');
+    const preset = (CONFIG.APRS_PATHS || []).find(p => p.id === (pSel && pSel.value))
+      || (CONFIG.APRS_PATHS || [])[0]
+      || { via1: 'WIDE1', via1SSID: 1, via2: 'WIDE2', via2SSID: 1, label: '' };
+
+    const base = `APRS ${region.id.toUpperCase()}`;
+    let name = base.slice(0, 8);
+    let n = 1;
+    while ((window.codeplug.aprs || []).some(a => a.name === name)) {
+      n++;
+      name = (base.slice(0, 7) + n).slice(0, 8);
+    }
+
+    const freq = Number(region.freq).toFixed(3);
+    try {
+      window.codeplug.addAPRS({
+        name,
+        ssid: 9,
+        via1: preset.via1 || '', via1SSID: preset.via1SSID !== undefined ? preset.via1SSID : 0,
+        via2: preset.via2 || '', via2SSID: preset.via2SSID !== undefined ? preset.via2SSID : 0,
+        iconTable: 0, iconIndex: 29,
+        comment: '',
+        txFreq: freq,
+        transmitQsy: true,
+        baudRate: 0
+      });
+      window.codeplug.modified = true;
+      this.renderAPRS();
+      this.updateOverview();
+      Utils.toast(`Added "${name}" — ${region.label} APRS ${freq} MHz${preset.label ? ` via ${preset.label}` : ''}`, 'success');
+    } catch (e) {
+      Utils.toast(e.message, 'error');
+    }
   },
 
   /**
@@ -4881,7 +5139,10 @@ const UI = {
     const table = document.getElementById('satellitesTable');
     
     if (!tbody || !empty || !table) return;
-    
+
+    const countEl = document.getElementById('satelliteCount');
+    if (countEl) countEl.textContent = `${window.codeplug.satellites.length} / ${CONFIG.LIMITS.MAX_SATELLITES} satellites`;
+
     if (window.codeplug.satellites.length === 0) {
       table.style.display = 'none';
       empty.style.display = '';
@@ -4902,6 +5163,7 @@ const UI = {
         <td>${sat.rx2 ? sat.rx2.toFixed(3) : '-'}</td>
         <td>${sat.tx2 ? sat.tx2.toFixed(3) : '-'}</td>
         <td>${sat.rx3 ? sat.rx3.toFixed(3) : '-'}</td>
+        <td>${sat.tx3 ? sat.tx3.toFixed(3) : '-'}</td>
         <td>${Utils.escapeHtml(sat.aprsConfig || '-')}</td>
         <td>
           <span class="badge ${sat.tle ? 'badge-success' : 'badge-warning'}">
@@ -4935,6 +5197,94 @@ const UI = {
     if (!this._tleUpdatedThisSession) {
       await this.autoUpdateTLEs();
     }
+  },
+
+  /**
+   * Lets the user pick which default satellites to add (existing ones skipped).
+   */
+  showLoadDefaultsModal() {
+    const defaults = CONFIG.DEFAULT_SATELLITES || [];
+    if (defaults.length === 0) { Utils.toast('No default satellites available', 'warning'); return; }
+    const noradOf = (v) => String(v || '').replace(/[A-Za-z]+$/, '').trim();
+    const existing = new Set((window.codeplug.satellites || []).map(s => noradOf(s.catalogueNumber)).filter(Boolean));
+    const rows = defaults.map((sat, i) => {
+      const norad = noradOf(sat.catalogueNumber);
+      const present = norad && existing.has(norad);
+      return `<label style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; font-size:0.9rem;">
+        <input type="checkbox" data-idx="${i}" checked>
+        <span style="flex:1;"><strong>${Utils.escapeHtml(sat.name)}</strong> <small style="color:var(--text-muted);">${Utils.escapeHtml(sat.catalogueNumber || '')}${present ? ' · already added' : ''}</small></span>
+      </label>`;
+    }).join('');
+    UI.showModal('Load Default Satellites', `
+      <p>Choose which default satellites to add (existing ones are skipped).</p>
+      <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+        <button type="button" class="btn btn-sm btn-secondary" id="satPickAll">Select All</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="satPickNone">Deselect All</button>
+      </div>
+      <div style="max-height:45vh; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:0.4rem 0.6rem;">${rows}</div>
+    `, {
+      confirmText: 'Add Selected',
+      onConfirm: () => {
+        const checked = [...document.querySelectorAll('#modalBody input[type="checkbox"][data-idx]:checked')].map(cb => parseInt(cb.dataset.idx, 10));
+        UI.hideModal();
+        this.loadSelectedDefaultSatellites(checked);
+      }
+    });
+    document.getElementById('satPickAll')?.addEventListener('click', () => document.querySelectorAll('#modalBody input[data-idx]').forEach(cb => { cb.checked = true; }));
+    document.getElementById('satPickNone')?.addEventListener('click', () => document.querySelectorAll('#modalBody input[data-idx]').forEach(cb => { cb.checked = false; }));
+  },
+
+  /**
+   * Add the chosen default satellites (dedupe by name/catalogue, cap 25) and
+   * refresh TLEs automatically.
+   */
+  async loadSelectedDefaultSatellites(indices) {
+    const defaults = CONFIG.DEFAULT_SATELLITES || [];
+    const noradOf = (v) => String(v || '').replace(/[A-Za-z]+$/, '').trim();
+    let added = 0, skipped = 0;
+    for (const i of indices) {
+      const sat = defaults[i];
+      if (!sat) continue;
+      const norad = noradOf(sat.catalogueNumber);
+      const exists = window.codeplug.satellites.some(s =>
+        s.name === sat.name || (norad && noradOf(s.catalogueNumber) === norad));
+      if (exists) { skipped++; continue; }
+      try { window.codeplug.addSatellite({ ...sat }); added++; }
+      catch (e) { skipped++; }
+    }
+    window.codeplug.modified = true;
+    this.renderSatellites();
+    this.updateOverview();
+    Utils.toast(`Added ${added} satellite${added !== 1 ? 's' : ''}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+    if (added > 0 && !this._tleUpdatedThisSession) {
+      await this.autoUpdateTLEs();
+    }
+  },
+
+  /**
+   * Remove every satellite from the codeplug after confirmation.
+   */
+  clearSatellites() {
+    const count = window.codeplug.satellites.length;
+    if (count === 0) {
+      Utils.toast('No satellites to clear', 'info');
+      return;
+    }
+    this.showModal('Clear All Satellites', `
+      <p>Remove all <strong>${count}</strong> satellite${count !== 1 ? 's' : ''} from the codeplug?</p>
+      <p style="color: var(--text-muted);">This cannot be undone. Any downloaded TLE data will be discarded.</p>
+    `, {
+      confirmText: 'Clear All',
+      confirmClass: 'btn-danger',
+      onConfirm: () => {
+        window.codeplug.satellites = [];
+        window.codeplug.modified = true;
+        UI.hideModal();
+        UI.renderSatellites();
+        UI.updateOverview();
+        Utils.toast('All satellites cleared', 'success');
+      }
+    });
   },
 
   /**
@@ -5126,6 +5476,10 @@ const UI = {
    * Show satellite editor
    */
   showSatelliteEditor(satId = null) {
+    if (!satId && window.codeplug.satellites.length >= CONFIG.LIMITS.MAX_SATELLITES) {
+      Utils.toast(`The firmware supports a maximum of ${CONFIG.LIMITS.MAX_SATELLITES} satellites`, 'warning');
+      return;
+    }
     const sat = satId ? window.codeplug.satellites.find(s => s.id === satId) : null;
     
     const content = `
@@ -5141,13 +5495,14 @@ const UI = {
           </div>
         </div>
         
+        <div class="form-group" style="margin-bottom:0.25rem;"><small style="color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Voice (FM)</small></div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">RX1 Frequency (MHz)</label>
+            <label class="form-label">RX1 – Voice Downlink (MHz)</label>
             <input type="number" class="form-input" id="satRx1" value="${sat?.rx1 || ''}" step="0.001" min="0" max="500">
           </div>
           <div class="form-group">
-            <label class="form-label">TX1 Frequency (MHz)</label>
+            <label class="form-label">TX1 – Voice Uplink (MHz)</label>
             <input type="number" class="form-input" id="satTx1" value="${sat?.tx1 || ''}" step="0.001" min="0" max="500">
           </div>
         </div>
@@ -5163,32 +5518,41 @@ const UI = {
           </div>
         </div>
         
+        <div class="form-group" style="margin-bottom:0.25rem;"><small style="color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">APRS</small></div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">RX2 Frequency (MHz)</label>
+            <label class="form-label">RX2 – APRS Downlink (MHz)</label>
             <input type="number" class="form-input" id="satRx2" value="${sat?.rx2 || ''}" step="0.001" min="0" max="500">
           </div>
           <div class="form-group">
-            <label class="form-label">TX2 Frequency (MHz)</label>
+            <label class="form-label">TX2 – APRS Uplink (MHz)</label>
             <input type="number" class="form-input" id="satTx2" value="${sat?.tx2 || ''}" step="0.001" min="0" max="500">
           </div>
         </div>
+        ${(sat?.rx2 || sat?.tx2) ? `
+        <div class="form-group" style="border:1px solid var(--border-color); border-radius:6px; padding:0.5rem 0.6rem;">
+          <small style="color:var(--text-muted);"><i class="mdi mdi-access-point"></i> This satellite supports APRS on RX2 ${sat?.rx2 || '—'} / TX2 ${sat?.tx2 || '—'} MHz — add a matching APRS config below.</small>
+        </div>` : ''}
         
+        <div class="form-group" style="margin-bottom:0.25rem;"><small style="color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">CW Rx</small></div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">RX3 Frequency (MHz)</label>
+            <label class="form-label">RX3 – CW Receive (MHz)</label>
             <input type="number" class="form-input" id="satRx3" value="${sat?.rx3 || ''}" step="0.001" min="0" max="500">
           </div>
           <div class="form-group">
-            <label class="form-label">TX3 Frequency (MHz)</label>
+            <label class="form-label">TX3 (unused)</label>
             <input type="number" class="form-input" id="satTx3" value="${sat?.tx3 || ''}" step="0.001" min="0" max="500">
           </div>
         </div>
         
         <div class="form-group">
-          <label class="form-label">APRS Config Name</label>
-          <input type="text" class="form-input" id="satAprsConfig" value="${sat?.aprsConfig || ''}" maxlength="8" placeholder="e.g., RS0ISS">
+          <label class="form-label">APRS Path / Config</label>
+          <select class="form-select" id="satAprsConfigSelect">${this._satAprsOptionHtml(sat?.aprsConfig || '', sat?.name || '')}</select>
+          <input type="text" class="form-input" id="satAprsConfig" value="${Utils.escapeHtml(sat?.aprsConfig || '')}" maxlength="14" placeholder="e.g., RS0ISS" style="margin-top:0.4rem;">
+          <small class="form-help">APRS uses RX2/TX2. Pick one of your APRS configs to use its digipeater path, or enter a custom 2-hop path.</small>
         </div>
+        <div class="form-group" id="satAprsMatchStatus">${this._satAprsMatchHtml(sat?.name || '', !!(sat?.rx2 || sat?.tx2 || sat?.aprsConfig))}</div>
       </form>
     `;
     
@@ -5196,6 +5560,224 @@ const UI = {
       confirmText: satId ? 'Save' : 'Add',
       onConfirm: () => this.saveSatellite(satId)
     });
+    this._bindSatAprsConfigControls();
+  },
+
+  /**
+   * Build digipeater path (AdditionalData) from an APRS config's via hops.
+   */
+  _satAprsPath(config) {
+    const pad = (s) => String(s || '').toUpperCase().padEnd(6, ' ').slice(0, 6);
+    const ssidDigit = (v) => { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 0 && n <= 15) ? String(n) : '0'; };
+    let path = '';
+    if (config.via1) path += pad(config.via1) + ssidDigit(config.via1SSID);
+    if (config.via2) path += pad(config.via2) + ssidDigit(config.via2SSID);
+    return path;
+  },
+
+  _satAprsHopLabel(config) {
+    const hops = [];
+    if (config.via1) hops.push(`${config.via1}${config.via1SSID !== undefined && config.via1SSID !== '' ? '-' + config.via1SSID : ''}`);
+    if (config.via2) hops.push(`${config.via2}${config.via2SSID !== undefined && config.via2SSID !== '' ? '-' + config.via2SSID : ''}`);
+    return hops.join(' ');
+  },
+
+  /**
+   * Options HTML for the satellite APRS config dropdown. Selecting a config
+   * writes its digipeater path into the satellite's APRS field.
+   */
+  _satAprsOptionHtml(currentPath, satName) {
+    const configs = window.codeplug.aprs || [];
+    const paths = configs.map(c => this._satAprsPath(c));
+    const matched = currentPath ? paths.indexOf(currentPath) : -1;
+    let html = `<option value="__none__" ${!currentPath ? 'selected' : ''}>None</option>`;
+
+    const digi = (CONFIG.APRS_DIGIPEATERS && satName) ? CONFIG.APRS_DIGIPEATERS[String(satName).trim()] : null;
+    const suggested = [];
+    if (digi) {
+      if (digi.via) suggested.push(digi.via);
+      if (digi.fallback) suggested.push(digi.fallback);
+    }
+    const suggestedPaths = suggested.map(name => this._satAprsPath({ via1: name, via1SSID: 0 }));
+    if (suggested.length) {
+      html += `<optgroup label="Satellite digipeater">` + suggested.map((name, i) => {
+        return `<option value="__suggested__" data-path="${Utils.escapeHtml(suggestedPaths[i])}" ${currentPath === suggestedPaths[i] ? 'selected' : ''}>${Utils.escapeHtml(name)}</option>`;
+      }).join('') + `</optgroup>`;
+    }
+
+    html += configs.map((c, i) => {
+      const hops = this._satAprsHopLabel(c);
+      return `<option value="${c.id}" data-path="${Utils.escapeHtml(paths[i])}" ${matched === i ? 'selected' : ''}>${Utils.escapeHtml(c.name)}${hops ? ' — ' + Utils.escapeHtml(hops) : ''}</option>`;
+    }).join('');
+    const matchesSuggested = currentPath && suggestedPaths.includes(currentPath);
+    html += `<option value="__custom__" ${currentPath && matched === -1 && !matchesSuggested ? 'selected' : ''}>Custom path…</option>`;
+    return html;
+  },
+
+  _syncSatAprsSelect() {
+    const sel = document.getElementById('satAprsConfigSelect');
+    const inp = document.getElementById('satAprsConfig');
+    if (!sel || !inp) return;
+    const path = inp.value;
+    let value = '__none__';
+    if (path) {
+      value = '__custom__';
+      [...sel.options].forEach(o => { if (o.dataset && o.dataset.path === path) value = o.value; });
+    }
+    sel.value = value;
+  },
+
+  /**
+   * Live match indicator: the radio only uses an APRS config whose name equals
+   * the satellite name, compared byte-for-byte (case-sensitive).
+   */
+  _satAprsMatchHtml(name, capable) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      return capable
+        ? `<small style="color:var(--text-muted);"><i class="mdi mdi-information-outline"></i> APRS is set up on RX2/TX2 — name the satellite to match or create an APRS config.</small>`
+        : `<small style="color:var(--text-muted);"><i class="mdi mdi-information-outline"></i> Name the satellite to match one of your APRS configs.</small>`;
+    }
+    const match = (window.codeplug.aprs || []).find(a => a.name === trimmed);
+    if (match) {
+      return `<small style="color:#2e7d32;"><i class="mdi mdi-check-circle"></i> Matches APRS config "${Utils.escapeHtml(trimmed)}" — the radio will use it on the APRS screen.</small>`;
+    }
+    if (!capable) {
+      return `<small style="color:var(--text-muted);"><i class="mdi mdi-information-outline"></i> Not configured for APRS. Set RX2/TX2 (or a path) to use it.</small>`;
+    }
+    const digi = (CONFIG.APRS_DIGIPEATERS || {})[trimmed];
+    const buttons = [];
+    if (digi && digi.via) {
+      buttons.push(`<button type="button" class="btn btn-sm btn-secondary" data-sat-add-aprs data-via="${Utils.escapeHtml(digi.via)}" style="margin:0.4rem 0.4rem 0 0;"><i class="mdi mdi-plus"></i> Add APRS config "${Utils.escapeHtml(trimmed)}" via ${Utils.escapeHtml(digi.via)}</button>`);
+    }
+    if (digi && digi.fallback) {
+      buttons.push(`<button type="button" class="btn btn-sm btn-secondary" data-sat-add-aprs data-via="${Utils.escapeHtml(digi.fallback)}" style="margin:0.4rem 0.4rem 0 0;"><i class="mdi mdi-plus"></i> via ${Utils.escapeHtml(digi.fallback)}</button>`);
+    }
+    if (!buttons.length) {
+      buttons.push(`<button type="button" class="btn btn-sm btn-secondary" data-sat-add-aprs data-via="" style="margin-top:0.4rem;"><i class="mdi mdi-plus"></i> Add APRS config "${Utils.escapeHtml(trimmed)}"</button>`);
+    }
+    const note = (digi && digi.note)
+      ? `<div style="margin-top:0.35rem;"><small style="color:var(--text-muted);"><i class="mdi mdi-information-outline"></i> ${Utils.escapeHtml(digi.note)}</small></div>`
+      : '';
+    return `<small style="color:#b26a00;"><i class="mdi mdi-alert"></i> This satellite has APRS frequencies (RX2/TX2) — add an APRS config named "${Utils.escapeHtml(trimmed)}" (must match exactly, case-sensitive) so the radio can use it. Without an exact match, only the digipeater path above is sent.</small>${note}<div>${buttons.join('')}</div>`;
+  },
+
+  _updateSatAprsMatch() {
+    const el = document.getElementById('satAprsMatchStatus');
+    if (!el) return;
+    const name = document.getElementById('satName')?.value || '';
+    const rx2 = parseFloat(document.getElementById('satRx2')?.value) || 0;
+    const tx2 = parseFloat(document.getElementById('satTx2')?.value) || 0;
+    const path = (document.getElementById('satAprsConfig')?.value || '').trim();
+    el.innerHTML = this._satAprsMatchHtml(name, !!(rx2 || tx2 || path));
+    el.querySelectorAll('[data-sat-add-aprs]').forEach(btn => {
+      btn.addEventListener('click', () => this._addMatchingAprsConfig(btn.getAttribute('data-via') || ''));
+    });
+  },
+
+  /**
+   * Rebuild the dropdown options (suggested digipeaters depend on the name).
+   */
+  _refreshSatAprsOptions() {
+    const sel = document.getElementById('satAprsConfigSelect');
+    const inp = document.getElementById('satAprsConfig');
+    if (!sel || !inp) return;
+    const name = (document.getElementById('satName')?.value || '').trim();
+    sel.innerHTML = this._satAprsOptionHtml(inp.value, name);
+    this._syncSatAprsSelect();
+  },
+
+  _bindSatAprsConfigControls() {
+    const sel = document.getElementById('satAprsConfigSelect');
+    const inp = document.getElementById('satAprsConfig');
+    if (sel && inp) {
+      sel.addEventListener('change', () => {
+        if (sel.value === '__custom__') { inp.focus(); return; }
+        if (sel.value === '__none__') { inp.value = ''; this._updateSatAprsMatch(); return; }
+        const opt = sel.options[sel.selectedIndex];
+        inp.value = opt ? (opt.dataset.path || '') : '';
+        this._updateSatAprsMatch();
+      });
+    }
+    const nameEl = document.getElementById('satName');
+    if (nameEl) nameEl.addEventListener('input', () => { this._refreshSatAprsOptions(); this._updateSatAprsMatch(); });
+    ['satRx2', 'satTx2', 'satAprsConfig'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this._updateSatAprsMatch());
+    });
+    this._updateSatAprsMatch();
+    this._syncSatAprsSelect();
+  },
+
+  /**
+   * Parse an AdditionalData digipeater path back into APRS config hops.
+   * Layout: name(6) + SSID(1) + name(6) + SSID(1).
+   */
+  _parseSatAprsPath(path) {
+    const p = String(path || '');
+    const hops = { via1: '', via1SSID: 0, via2: '', via2SSID: 0 };
+    const readHop = (nameSlice, ssidChar) => {
+      const n = parseInt(ssidChar, 10);
+      return { name: nameSlice.replace(/\s+$/, ''), ssid: Number.isFinite(n) ? n : 0 };
+    };
+    if (p.length >= 7) {
+      const hop = readHop(p.slice(0, 6), p.slice(6, 7));
+      hops.via1 = hop.name; hops.via1SSID = hop.ssid;
+    } else if (p.length >= 1) {
+      hops.via1 = p.replace(/\s+$/, '');
+    }
+    if (p.length >= 14) {
+      const hop = readHop(p.slice(7, 13), p.slice(13, 14));
+      hops.via2 = hop.name; hops.via2SSID = hop.ssid;
+    }
+    return hops;
+  },
+
+  /**
+   * Create an APRS config named after the current satellite so the radio
+   * picks it up (firmware matches the satellite name byte-for-byte). The new
+   * config reuses the digipeater path selected in the dropdown.
+   */
+  _addMatchingAprsConfig(viaName) {
+    const name = (document.getElementById('satName')?.value || '').trim();
+    if (!name) { Utils.toast('Set a satellite name first', 'warning'); return; }
+    const tx2 = parseFloat(document.getElementById('satTx2')?.value) || 0;
+    const existing = (window.codeplug.aprs || []).find(a => a.name === name);
+    if (existing) { Utils.toast(`APRS config "${name}" already exists`, 'info'); return; }
+
+    const sel = document.getElementById('satAprsConfigSelect');
+    const inp = document.getElementById('satAprsConfig');
+    const path = (inp?.value || '').trim();
+    const digi = (CONFIG.APRS_DIGIPEATERS || {})[name] || null;
+
+    let hops = null;
+    if (viaName) {
+      hops = { via1: viaName, via1SSID: 0, via2: '', via2SSID: 0 };
+    } else if (sel && sel.value && sel.value !== '__none__' && sel.value !== '__custom__') {
+      const cfg = (window.codeplug.aprs || []).find(a => a.id === sel.value);
+      if (cfg) hops = {
+        via1: cfg.via1 || '', via1SSID: cfg.via1SSID !== undefined ? cfg.via1SSID : 0,
+        via2: cfg.via2 || '', via2SSID: cfg.via2SSID !== undefined ? cfg.via2SSID : 0
+      };
+    }
+    if (!hops && path) hops = this._parseSatAprsPath(path);
+    if (!hops && digi && digi.via) hops = { via1: digi.via, via1SSID: 0, via2: '', via2SSID: 0 };
+    if (!hops) hops = { via1: '', via1SSID: 0, via2: '', via2SSID: 0 };
+
+    try {
+      const created = window.codeplug.addAPRS({ name, ssid: 7, ...hops, iconTable: 0, iconIndex: 15, comment: '', baudRate: 0, txFreq: tx2 ? String(tx2) : '' });
+      UI.renderAPRS();
+      const hopLabel = this._satAprsHopLabel(created);
+      Utils.toast(`Added APRS config "${name}"${hopLabel ? ` via ${hopLabel}` : ''}${tx2 ? ` (TX ${tx2} MHz)` : ''}`, 'success');
+      if (sel && inp) {
+        inp.value = this._satAprsPath(created);
+        sel.innerHTML = UI._satAprsOptionHtml(inp.value, name);
+        sel.value = created.id;
+      }
+      this._updateSatAprsMatch();
+    } catch (e) {
+      Utils.toast(e.message, 'error');
+    }
   },
 
   /**
@@ -6209,9 +6791,9 @@ const UI = {
         <input type="text" class="form-input" id="editAprsComment" value="${Utils.escapeHtml(aprs.comment)}" maxlength="24">
       </div>
       <div class="form-group">
-        <label class="form-label">TX Frequency</label>
+        <label class="form-label">TX Frequency (QSY)</label>
         <input type="text" class="form-input" id="editAprsTxFreq" value="${Utils.escapeHtml(aprs.txFreq || aprs.txFrequency || '')}" placeholder="e.g. 144.800000">
-        <small class="form-help">Frequency in MHz (e.g. 144.800000)</small>
+        <small class="form-help">APRS channel in MHz. With "Transmit QSY" enabled the radio switches to this frequency to beacon (e.g. 144.800 in Europe).</small>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -7241,7 +7823,7 @@ const UI = {
       const t = (this._melodyAccountTunes || [])[index];
       if (!t) return;
       try {
-        const full = await API.request(`/opengd77/melodies/${t.id}`);
+        const full = await API.request(`/melodies/${t.id}`);
         seq = full.data;
         name = t.name;
       } catch (e) {
@@ -8217,7 +8799,7 @@ const UI = {
             const langInfo = fm.manifest.languages.find(l => l.code === language);
             if (langInfo?.file) {
               try {
-                const langResponse = await fetch(`/opengd77/dl/${versionData.languagesPath}/${langInfo.file}`);
+                const langResponse = await fetch(`/dl/${versionData.languagesPath}/${langInfo.file}`);
                 if (langResponse.ok) {
                   const languageData = new Uint8Array(await langResponse.arrayBuffer());
                   window.radioUSB.mergeLanguageFile(data, languageData);
@@ -8861,8 +9443,9 @@ const UI = {
     if (!entryCount) return current;
 
     const vpEnabled = useVPMemory && radioTypeIndex !== 3 && radioTypeIndex !== 6;
-    const memorySize = this.getSelectedRadioMemorySize(radioTypeIndex, vpEnabled);
     const isDM32 = this.isDM32Radio() || this.isC7000DMRIndex(radioTypeIndex);
+    // Index 6 (C7000) has no DMRID_MEMORY_SIZES entry; it is window-bounded.
+    const memorySize = isDM32 ? 0 : this.getSelectedRadioMemorySize(radioTypeIndex, vpEnabled);
 
     for (let len = 50; len >= 6; len--) {
       const recordSize = this.compressSize(len) + 3;
@@ -8918,8 +9501,12 @@ const UI = {
     const ID_NUMBER_SIZE = 3;
     const recordSize = compressedSize + ID_NUMBER_SIZE;
 
-    // Get memory size for selected radio type (from DMRIDForm.cs getSelectedRadioMemorySize)
-    const memorySize = this.getSelectedRadioMemorySize(radioTypeIndex, useVPMemory);
+    // Get memory size for selected radio type (from DMRIDForm.cs getSelectedRadioMemorySize).
+    // The C7000 / DM-32 (index 6) has no entry in DMRID_MEMORY_SIZES - it is
+    // bounded by the firmware's address window instead (getDM32MaxRecords), so
+    // skip the table lookup (which would otherwise warn and clamp to index 5).
+    const isC7000 = this.isDM32Radio() || this.isC7000DMRIndex(radioTypeIndex);
+    const memorySize = isC7000 ? 0 : this.getSelectedRadioMemorySize(radioTypeIndex, useVPMemory);
 
     // Prefer the connected radio's real capacity (from its flash chip ID); fall
     // back to the selected type when no radio is connected. The DM-32 / UV008
@@ -8927,7 +9514,7 @@ const UI = {
     const connectedMax = this.getConnectedDMRMaxRecords(recordSize, useVPMemory);
     const maxRecords = connectedMax !== null
       ? connectedMax
-      : ((this.isDM32Radio() || this.isC7000DMRIndex(radioTypeIndex))
+      : (isC7000
           ? this.getDM32MaxRecords(recordSize, useVPMemory)
           : this.getMaxRecords(memorySize, recordSize));
 
@@ -9097,6 +9684,32 @@ const UI = {
   },
 
   /**
+   * True when the currently selected/connected radio is the DM-32 / UV008
+   * (C7000), the only platform whose firmware understands the extra analogue
+   * codeplug modes "AM" and "FM Broadcast" (chMode 2/3). Falls back to the
+   * saved/selected type so the channel editor behaves sensibly when offline.
+   */
+  supportsDm32AnalogModes() {
+    const type = window.radioUSB?.getRadioType?.() ||
+      window.radioUSB?.radioType ||
+      Utils.getSavedRadioType?.() ||
+      CONFIG.RADIO_TYPES.MK22;
+    return type === CONFIG.RADIO_TYPES.DM32;
+  },
+
+  /**
+   * Abbreviation used to show a channel's mode in tables/exports.
+   */
+  channelModeAbbrev(ch) {
+    switch (ch && ch.type) {
+      case CONFIG.CHANNEL_TYPES.DIGITAL: return 'DMR';
+      case CONFIG.CHANNEL_TYPES.AM: return 'AM';
+      case CONFIG.CHANNEL_TYPES.FM_BROADCAST: return 'FM BC';
+      default: return 'FM';
+    }
+  },
+
+  /**
    * True for the DM-32 / UV008 (C7000) entry in the DMR radio-type dropdown.
    */
   isC7000DMRIndex(radioTypeIndex) {
@@ -9142,7 +9755,14 @@ const UI = {
       case 16408:
       case 28696:
         return 14188544 - (isFlashPlatform ? CONFIG.PROTOCOL.FLASH_MEMORY_EEPROM_EMU_SIZE : 0);
-      default: return 557056;
+      default:
+        // MK22 radios ship with a 25Q80 (1 MB), so an unrecognised ID there is
+        // still likely a 1 MB part. STM32 / C7000 radios always carry a much
+        // larger flash, so an unrecognised ID means the read was flaky or the
+        // chip is unlisted - returning the 1 MB size there made the CPS clamp
+        // the DM-1701 / MD-UV380 to a tiny capacity. Report "unknown" so the
+        // caller falls back to the selected radio type's real memory size.
+        return isFlashPlatform ? null : 557056;
     }
   },
 
@@ -9159,6 +9779,9 @@ const UI = {
     const isFlashPlatform = radio.radioType === CONFIG.RADIO_TYPES.STM32 ||
                             radio.radioType === CONFIG.RADIO_TYPES.DM32;
     let memorySize = this.getRadioMemorySizeFromFlashId(info.flashId, isFlashPlatform);
+    // Unknown flash ID on a flash-based radio: don't trust a bogus small size,
+    // fall back to the selected radio type instead.
+    if (memorySize === null) return null;
 
     // Voice-prompt memory is usable for MK22 radios only (CPS: index !== 3).
     if (useVPMemory && !isFlashPlatform) {
@@ -9249,25 +9872,35 @@ const UI = {
 
     // Check if we have radio info from a connected radio
     const radioInfo = window.radioUSB?.radioInfo;
-    if (!radioInfo || typeof radioInfo.radioType !== 'number') {
-      console.log('No radio info available for auto-detection');
-      return false;
+    let dmrIndex = null;
+    if (radioInfo && typeof radioInfo.radioType === 'number') {
+      // Map firmware radio type to DMR database index
+      dmrIndex = this.mapFirmwareRadioTypeToDMRIndex(radioInfo.radioType);
+      if (dmrIndex === null) {
+        console.warn(`Unknown firmware radio type: ${radioInfo.radioType}`);
+      }
+    } else {
+      // No firmware info (e.g. straight after a silent reconnect). Fall back to
+      // the detected platform so the capacity selector is not left on a stale
+      // default. MK22 cannot be narrowed without firmware info, so leave it.
+      const platform = window.radioUSB?.radioType;
+      if (platform === CONFIG.RADIO_TYPES.STM32) dmrIndex = 3;
+      else if (platform === CONFIG.RADIO_TYPES.DM32) dmrIndex = 6;
     }
-
-    // Map firmware radio type to DMR database index
-    const dmrIndex = this.mapFirmwareRadioTypeToDMRIndex(radioInfo.radioType);
     if (dmrIndex === null) {
-      console.warn(`Unknown firmware radio type: ${radioInfo.radioType}`);
+      console.log('No radio info available for auto-detection');
       return false;
     }
 
     // Update the dropdown if the value is different
     if (parseInt(radioTypeSelect.value) !== dmrIndex) {
       radioTypeSelect.value = dmrIndex;
-      console.log(`Auto-detected DMR Radio Type: ${radioInfo.radioTypeName} → index ${dmrIndex}`);
+      console.log(`Auto-detected DMR Radio Type: ${(radioInfo && radioInfo.radioTypeName) || radioTypeSelect.value} → index ${dmrIndex}`);
 
       // Show toast notification
-      Utils.toast(`DMR Radio Type auto-detected: ${radioInfo.radioTypeName}`, 'info');
+      if (radioInfo && radioInfo.radioTypeName) {
+        Utils.toast(`DMR Radio Type auto-detected: ${radioInfo.radioTypeName}`, 'info');
+      }
     }
 
     // Always refresh so the displayed max contacts reflects the connected
@@ -10900,12 +11533,14 @@ const UI = {
         const modeLower = (f.mode || '').toLowerCase();
         const isDMR = modeLower === 'dmr' || modeLower === 'dm' || modeLower === 'tdma' || f.colorCode;
         const isNFM = modeLower === 'nfm' || modeLower === 'fmn';
+        const isAM = modeLower === 'am' || modeLower === 'a3e';
+        const isBroadcast = modeLower === 'wfm' || modeLower === 'fm broadcast' || modeLower === 'broadcast';
         const channelName = Utils.truncate(f.alpha || f.callsign || f.description || `${f.frequency}`, CONFIG.LIMITS.CHANNEL_NAME_LEN);
         const rxFreq = parseFloat(f.frequency) || 0;
         const txFreq = parseFloat(f.inputFreq) || rxFreq;
 
-        // Determine bandwidth: FM=25KHz, NFM=12.5KHz
-        const bandwidth = isDMR ? 12.5 : (isNFM ? 12.5 : 25);
+        // Determine bandwidth: FM broadcast=25kHz, FM=25kHz, NFM/AM=12.5kHz
+        const bandwidth = isDMR ? 12.5 : (isBroadcast ? 25 : (isNFM || isAM ? 12.5 : 25));
 
         // Convert tone to valid CTCSS or DCS format
         let txTone = 'None';
@@ -10914,7 +11549,9 @@ const UI = {
         }
 
         // Duplicate check by channel name + type
-        const channelType = isDMR ? CONFIG.CHANNEL_TYPES.DIGITAL : CONFIG.CHANNEL_TYPES.ANALOG;
+        const channelType = isDMR ? CONFIG.CHANNEL_TYPES.DIGITAL :
+          isAM ? CONFIG.CHANNEL_TYPES.AM :
+          isBroadcast ? CONFIG.CHANNEL_TYPES.FM_BROADCAST : CONFIG.CHANNEL_TYPES.ANALOG;
         const isDuplicate = window.codeplug.channels.some(ch =>
           ch.name === channelName && ch.type === channelType
         );
@@ -10936,7 +11573,7 @@ const UI = {
 
         const channelData = {
           name: channelName,
-          type: isDMR ? CONFIG.CHANNEL_TYPES.DIGITAL : CONFIG.CHANNEL_TYPES.ANALOG,
+          type: channelType,
           rxFreq: rxFreq,
           txFreq: txFreq,
           bandwidth: bandwidth,

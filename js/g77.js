@@ -90,10 +90,43 @@ const G77 = {
     APRS_CONFIGS: 8
   },
   
-  // Channel modes
+  // Channel modes (channel `chMode` byte).
+  // The DM32 / UV008 (C7000) firmware extends the upstream Analogue/Digital
+  // values with FM Broadcast and AM; its UI string table is ordered
+  // "FM", "DMR", "FM+", "AM" which matches 0..3.
   CH_MODE: {
     ANALOG: 0,
-    DIGITAL: 1
+    DIGITAL: 1,
+    FM_BROADCAST: 2,
+    AM: 3
+  },
+
+  /**
+   * Map a codeplug chMode byte to a channel type string.
+   * @param {number} mode - chMode byte
+   * @returns {string} channel type (CONFIG.CHANNEL_TYPES.*)
+   */
+  chModeToType(mode) {
+    switch (mode) {
+      case this.CH_MODE.DIGITAL: return CONFIG.CHANNEL_TYPES.DIGITAL;
+      case this.CH_MODE.FM_BROADCAST: return CONFIG.CHANNEL_TYPES.FM_BROADCAST;
+      case this.CH_MODE.AM: return CONFIG.CHANNEL_TYPES.AM;
+      default: return CONFIG.CHANNEL_TYPES.ANALOG;
+    }
+  },
+
+  /**
+   * Map a channel type string to a codeplug chMode byte.
+   * @param {string} type - channel type (CONFIG.CHANNEL_TYPES.*)
+   * @returns {number} chMode byte
+   */
+  typeToChMode(type) {
+    switch (type) {
+      case CONFIG.CHANNEL_TYPES.DIGITAL: return this.CH_MODE.DIGITAL;
+      case CONFIG.CHANNEL_TYPES.FM_BROADCAST: return this.CH_MODE.FM_BROADCAST;
+      case CONFIG.CHANNEL_TYPES.AM: return this.CH_MODE.AM;
+      default: return this.CH_MODE.ANALOG;
+    }
   },
   
   // Contact types
@@ -308,7 +341,7 @@ const G77 = {
    * Offset 0-15:  name[16]
    * Offset 16-19: rxFreq (uint32, BCD)
    * Offset 20-23: txFreq (uint32, BCD)
-   * Offset 24:    chMode (0=Analog, 1=Digital)
+   * Offset 24:    chMode (0=Analog FM, 1=Digital DMR, 2=FM Broadcast, 3=AM; 2/3 DM32 only)
    * Offset 25:    libreDMR_Power
    * Offset 26:    locationLat0 (LS byte)
    * Offset 27:    tot
@@ -461,7 +494,7 @@ const G77 = {
       id: Utils.generateId(),
       number: number,
       name: name,
-      type: chMode === this.CH_MODE.DIGITAL ? CONFIG.CHANNEL_TYPES.DIGITAL : CONFIG.CHANNEL_TYPES.ANALOG,
+      type: this.chModeToType(chMode),
       rxFreq: rxFreq,
       txFreq: txFreq,
       bandwidth: bandwidth,
@@ -912,7 +945,7 @@ const G77 = {
       this.writeDtmfString(data, offset + 16, list[i].code || '', 16);
     }
   },
-  
+
   /**
    * Parse a single VFO entry from binary data (same layout as channel, 56 bytes)
    */
@@ -988,7 +1021,7 @@ const G77 = {
     return {
       rxFreq: rxFreq > 0 ? rxFreq : 145.500,
       txFreq: txFreq > 0 ? txFreq : 145.500,
-      type: chMode === this.CH_MODE.DIGITAL ? 'Digital' : 'Analogue',
+      type: this.chModeToType(chMode),
       power: this.POWER_LEVELS[powerLevel] || 'Master',
       bandwidth: bandwidth,
       rxTone: rxTone,
@@ -1156,14 +1189,52 @@ const G77 = {
    * Parse band limits from binary data
    */
   parseBandLimits(data, view) {
-    // Band limits are typically stored in device info or general settings
-    // Using default values if not found
-    return {
-      vhfMin: 127000000,
-      vhfMax: 180000000,
-      uhfMin: 380000000,
-      uhfMax: 564000000
+    // The CPS band limits live in CodeplugDeviceInfo_t at 0x80, as BCD integer
+    // MHz (codeplug.c codeplugGetDeviceInfo() -> bcd2uint16). The firmware uses
+    // them (x100000 = 10 Hz units) only when Band Limits = CPS, so a wrong or
+    // empty block makes the radio reject otherwise-valid TX frequencies.
+    const off = this.ADDR.DEVICE_INFO;
+    const toHz = (raw) => this.bcdToInt(raw) * 1000000;
+    const vhfMin = toHz(view.getUint16(off + 4, true));
+    const vhfMax = toHz(view.getUint16(off + 6, true));
+    const uhfMin = toHz(view.getUint16(off + 0, true));
+    const uhfMax = toHz(view.getUint16(off + 2, true));
+
+    const valid =
+      vhfMin > 0 && vhfMin < vhfMax &&
+      uhfMin > vhfMax && uhfMin < uhfMax &&
+      vhfMax > 0 && uhfMax > 0;
+    if (!valid) {
+      // Uninitialised / garbage block (e.g. 0xFFFF). Fall back to wide defaults
+      // so the UI shows something sensible; the user can set precise limits.
+      return {
+        vhfMin: 127000000,
+        vhfMax: 180000000,
+        uhfMin: 380000000,
+        uhfMax: 564000000
+      };
+    }
+    return { vhfMin, vhfMax, uhfMin, uhfMax };
+  },
+
+  /**
+   * Serialize CPS band limits into the device info block at 0x80.
+   * Values are whole MHz stored as BCD uint16 (matching codeplug.c).
+   * @param {Uint8Array} data
+   * @param {DataView} view
+   * @param {{vhfMin:number,vhfMax:number,uhfMin:number,uhfMax:number}} bandLimits - Hz
+   */
+  serializeBandLimits(data, view, bandLimits) {
+    if (!bandLimits) return;
+    const off = this.ADDR.DEVICE_INFO;
+    const toBcdMhz = (hz) => {
+      const mhz = Math.max(0, Math.min(9999, Math.round(Number(hz) / 1000000)));
+      return this.intToBcd(mhz);
     };
+    view.setUint16(off + 4, toBcdMhz(bandLimits.vhfMin), true);
+    view.setUint16(off + 6, toBcdMhz(bandLimits.vhfMax), true);
+    view.setUint16(off + 0, toBcdMhz(bandLimits.uhfMin), true);
+    view.setUint16(off + 2, toBcdMhz(bandLimits.uhfMax), true);
   },
   
   /**
@@ -1277,6 +1348,10 @@ const G77 = {
     
     // Write model identifier
     this.writeString(data, this.ADDR.MODEL, 'MD-760P', 8);
+    
+    // Write CPS band limits (device info at 0x80). Without this the block stays
+    // 0xFF and the firmware's "Band Limits: CPS" validation can reject TX.
+    this.serializeBandLimits(data, view, codeplug.bandLimits);
     
     // Write general settings
     this.serializeGeneralSettings(data, view, codeplug.general);
@@ -1477,7 +1552,7 @@ const G77 = {
    * Key offsets for VFO:
    * Offset 16-19: rxFreq (uint32, BCD)
    * Offset 20-23: txFreq (uint32, BCD)
-   * Offset 24:    chMode (0=Analog, 1=Digital)
+   * Offset 24:    chMode (0=Analog FM, 1=Digital DMR, 2=FM Broadcast, 3=AM; 2/3 DM32 only)
    * Offset 25:    power level
    * Offset 32-33: rxTone (uint16)
    * Offset 34-35: txTone (uint16)
@@ -1505,7 +1580,7 @@ const G77 = {
     view.setUint32(offset + 20, this.frequencyToBcd(vfo.txFreq), true);
     
     // Channel mode
-    data[offset + 24] = vfo.type === 'Digital' ? this.CH_MODE.DIGITAL : this.CH_MODE.ANALOG;
+    data[offset + 24] = this.typeToChMode(vfo.type);
     
     // Power level
     const powerIndex = this.POWER_LEVELS.indexOf(vfo.power);
@@ -1619,13 +1694,13 @@ const G77 = {
     data[offset + 14] = (lonEncoded >> 16) & 0xFF;
     
     // Via1: 6 bytes at offset 15 (C string - firmware uses strlen)
-    this.writeCString(data, offset + 15, config.via1 || 'WIDE1', 6);
+    this.writeCString(data, offset + 15, config.via1 || '', 6);
     
     // Via1 SSID: 1 byte at offset 21
     data[offset + 21] = (config.via1SSID >= 0 && config.via1SSID <= 15) ? config.via1SSID : 1;
     
     // Via2: 6 bytes at offset 22 (C string - firmware uses strlen)
-    this.writeCString(data, offset + 22, config.via2 || 'WIDE2', 6);
+    this.writeCString(data, offset + 22, config.via2 || '', 6);
     
     // Via2 SSID: 1 byte at offset 28
     data[offset + 28] = (config.via2SSID >= 0 && config.via2SSID <= 15) ? config.via2SSID : 1;
@@ -1855,7 +1930,7 @@ const G77 = {
    * Offset 0-15:  name[16]
    * Offset 16-19: rxFreq (uint32, BCD)
    * Offset 20-23: txFreq (uint32, BCD)
-   * Offset 24:    chMode (0=Analog, 1=Digital)
+   * Offset 24:    chMode (0=Analog FM, 1=Digital DMR, 2=FM Broadcast, 3=AM; 2/3 DM32 only)
    * Offset 25:    libreDMR_Power
    * Offset 26:    locationLat0 (LS byte)
    * Offset 27:    tot
@@ -1895,7 +1970,7 @@ const G77 = {
     view.setUint32(offset + 20, this.frequencyToBcd(channel.txFreq), true);
     
     // Channel mode
-    data[offset + 24] = channel.type === CONFIG.CHANNEL_TYPES.DIGITAL ? this.CH_MODE.DIGITAL : this.CH_MODE.ANALOG;
+    data[offset + 24] = this.typeToChMode(channel.type);
     
     // Power level
     const powerIndex = this.POWER_LEVELS.indexOf(channel.power);
@@ -2235,7 +2310,7 @@ const G77 = {
       }
     }
   },
-  
+
   /**
    * Write a null-terminated C string, padding with 0x00.
    *
@@ -2358,13 +2433,19 @@ const G77 = {
   },
   
   /**
-   * Format a DCS code value as octal string with suffix
+   * Format a DCS code value as a display string with suffix.
+   *
+   * The firmware stores DCS codes as plain hexadecimal digits and renders them
+   * with `dcsPrintf()` via "%03X" (see trx.c TRX_DCSCodes[], codeplug.h
+   * CSS_TYPE_DCS). e.g. code 0x464 displays as "D464N". Do NOT use octal here:
+   * parseInt('464', 8) === 0x134, which the radio shows as "D134N".
+   *
    * @param {number} code - The DCS code value (0-0xFFF)
    * @param {string} suffix - 'N' for Normal, 'I' for Inverted
    * @returns {string} Formatted DCS code (e.g., "D023N")
    */
   formatDcsCode(code, suffix) {
-    return 'D' + code.toString(8).padStart(3, '0') + suffix;
+    return 'D' + code.toString(16).toUpperCase().padStart(3, '0') + suffix;
   },
   
   /**
@@ -2402,7 +2483,8 @@ const G77 = {
   
   /**
    * Encode CTCSS/DCS tone for binary storage
-   * DCS format: D{octal_code}N for normal, D{octal_code}I for inverted
+   * DCS format: D{hex_code}N for normal, D{hex_code}I for inverted
+   * (the firmware stores/prints the digits as hexadecimal, not octal)
    * CTCSS format: numeric frequency (e.g., "88.5") - stored in BCD
    */
   encodeTone(tone) {
@@ -2429,8 +2511,8 @@ const G77 = {
         baseMask = 0x8000;
       }
       
-      // Parse the octal DCS code
-      const code = parseInt(codeStr, 8);
+      // Parse the DCS code as hexadecimal digits (matches firmware display)
+      const code = parseInt(codeStr, 16);
       if (!isNaN(code) && code >= 0 && code <= 0xFFF) {
         return baseMask | code;
       }

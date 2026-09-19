@@ -1,5 +1,11 @@
 /* OpenGD77 CPS Web - Styles */
 
+/* M12 Font for GRID.RADIO branding */
+@font-face {
+  font-family: 'M12Font';
+  src: url('/m12.TTF') format('truetype');
+}
+
 :root {
   --primary: #667eea;
   --primary-dark: #5a67d8;
@@ -26,6 +32,7 @@
   
   --font-mono: 'JetBrains Mono', monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-gridradio: 'M12Font', sans-serif;
   
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
@@ -108,7 +115,8 @@ body {
 }
 
 .loading-subtext {
-  font-family: var(--font-sans);
+  font-family: var(--font-gridradio);
+  letter-spacing: 0.06em;
   font-size: 1rem;
   color: var(--primary);
   margin-bottom: 2rem;
@@ -1541,7 +1549,7 @@ body {
 
 .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr));
   gap: 1rem;
 }
 
@@ -1661,11 +1669,25 @@ body {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .codeplug-card-footer .btn {
   font-size: 0.8rem;
   padding: 0.375rem 0.75rem;
+}
+
+/* Theme cards have several actions; let them wrap and share the row. */
+.theme-card-actions {
+  justify-content: flex-start;
+}
+.theme-card-actions .btn {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.theme-card-actions .btn.icon-btn {
+  flex: 0 0 auto;
+  padding: 0.375rem 0.6rem;
 }
 
 /* Codeplug Preview */
@@ -3155,15 +3177,27 @@ tr.inactive-row:hover {
 /* Theme Editor Styles */
 .theme-editor-container {
   padding: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.5rem;
+  align-items: start;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Ensure theme colors panel can scroll internally if needed */
 .theme-colors-panel {
-  overflow-y: auto;
+  min-width: 0;
   overflow-x: hidden;
+}
+
+.theme-preview-panel {
+  position: sticky;
+  top: 1rem;
+  height: fit-content;
+  min-width: 0;
 }
 
 .color-input-group {
@@ -3316,11 +3350,97 @@ tr.inactive-row:hover {
 /* Responsive theme editor */
 @media (max-width: 1024px) {
   .theme-editor-container {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 1rem;
   }
-  
+
   .theme-preview-panel {
     position: static !important;
+    height: auto;
+  }
+}
+
+/* ================================================================
+   THEME EDITOR - MOBILE REWORK (phones)
+   ================================================================ */
+@media (max-width: 768px) {
+  /* Flatten the editor: a plain vertical flow so the colours panel and the
+     preview/library panel stack and the section scrolls as one, instead of the
+     inner container scrolling/overlapping on a small viewport. */
+  #section-theme-editor .theme-editor-container {
+    display: block;
+    height: auto;
+    overflow: visible;
+    padding: 0.75rem;
+  }
+  #section-theme-editor .theme-colors-panel,
+  #section-theme-editor .theme-preview-panel {
+    display: block;
+    width: 100%;
+    position: static;
+    margin-bottom: 1rem;
+  }
+
+  /* Single-column colour pickers so nothing is clipped or tiny */
+  #section-theme-editor .color-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* iOS zooms in on inputs < 16px; keep hex fields legible and tappable */
+  #section-theme-editor .color-picker-wrapper .color-hex,
+  #section-theme-editor input,
+  #section-theme-editor select,
+  #section-theme-editor textarea {
+    font-size: 16px;
+  }
+  #section-theme-editor .color-picker-wrapper .color-input {
+    width: 48px;
+    height: 40px;
+  }
+  #section-theme-editor .color-picker-wrapper .color-hex {
+    height: 40px;
+  }
+
+  /* Preview + library stack full width */
+  .theme-preview-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .theme-preview-panel,
+  .theme-preview-card,
+  .theme-library-card {
+    width: 100%;
+    max-width: 100%;
+  }
+  #themePreviewCanvas canvas,
+  .theme-thumbnail canvas {
+    max-width: 100%;
+    height: auto;
+  }
+  #themePreviewCanvas {
+    overflow-x: auto;
+  }
+  .theme-library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    max-height: none !important;
+  }
+  .theme-loading {
+    grid-column: 1 / -1;
+  }
+  #teMyList,
+  #teCommunityList {
+    max-height: none !important;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  #section-theme-editor .color-grid {
+    gap: 0.6rem;
+  }
+  .theme-library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)) !important;
   }
 }
 
@@ -3704,25 +3824,46 @@ tr.inactive-row:hover {
     white-space: nowrap;
   }
   
-  /* Make table actions column sticky */
+  /* Make the actions column sticky, but only as wide as its icons so it does
+     not lap over the row contents. width:1px makes the table lay the column
+     out to its content instead of absorbing the table's leftover width. */
   .data-table th:last-child,
   .data-table td:last-child {
     position: sticky;
     right: 0;
+    width: 1px;
+    white-space: nowrap;
     background: var(--bg-card);
     box-shadow: -2px 0 4px rgba(0,0,0,0.3);
   }
-  
+
+  /* Keep the cell in table layout (a flex cell stretches and drifts left)
+     and pack the buttons into a tight, right-aligned icon strip. */
+  .data-table td.actions {
+    display: table-cell;
+    text-align: right;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .data-table td.actions .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin: 0 0 0 0.1rem;
+  }
+
   .data-table tbody tr:hover td:last-child {
     background: var(--bg-hover);
   }
-  
-  /* Touch-friendly action buttons */
+
+  /* Touch-friendly action buttons (compact so the sticky column stays narrow) */
   .data-table .action-btn {
-    padding: 0.5rem;
+    padding: 0.25rem;
     font-size: 1rem;
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 30px;
+    min-height: 30px;
   }
   
   /* Form inputs - larger touch targets */
@@ -5552,7 +5693,7 @@ mark.search-highlight {
   color: var(--text-muted);
 }
 
-/* WTR Map Popup */
+/* Shared map popup (WTR + repeater maps) */
 .map-popup {
   font-family: var(--font-sans);
   font-size: 13px;
@@ -5578,12 +5719,14 @@ mark.search-highlight {
   font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 0.15rem;
+  word-break: break-word;
 }
 
 .map-popup .popup-product {
   font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 0.35rem;
+  word-break: break-word;
 }
 
 .map-popup .popup-status {
@@ -5646,6 +5789,9 @@ mark.search-highlight {
 
 .map-popup .popup-channel-meta {
   margin-top: 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
 }
 
 .map-popup .popup-mode-tag {
@@ -5656,6 +5802,7 @@ mark.search-highlight {
   background: rgba(237, 137, 54, 0.15);
   color: var(--accent);
   font-family: var(--font-sans);
+  white-space: nowrap;
 }
 
 .map-popup .popup-footer {
@@ -5680,6 +5827,10 @@ mark.search-highlight {
   transition: opacity var(--transition-fast);
 }
 
+.map-popup .popup-select-btn i {
+  margin-right: 0.35rem;
+}
+
 .map-popup .popup-select-btn:hover {
   opacity: 0.85;
 }
@@ -5692,6 +5843,11 @@ mark.search-highlight {
 .map-popup .popup-select-btn.deselect {
   background: var(--danger);
   color: #fff;
+}
+
+/* Make Leaflet give the shared popup room to breathe */
+.leaflet-popup-content .map-popup {
+  width: 100%;
 }
 
 /* WTR Options bar improvements */
@@ -6080,6 +6236,15 @@ mark.search-highlight {
 .map-container { height: min(60vh, 520px); }
 .map-container .leaflet-container { height: 100%; }
 
+/* Contain Leaflet's internal z-index (panes up to 800) inside each map so it
+   can no longer paint over the fixed sidebar/menu on narrow screens. */
+.map-container,
+#wtrMapDiv,
+#rrMap {
+  position: relative;
+  z-index: 0;
+}
+
 /* ---------- Feature polish (tablet / phone) ------------------------- */
 @media (max-width: 768px) {
   .section-subheader { padding: 0.75rem 1rem 0.25rem; }
@@ -6090,7 +6255,7 @@ mark.search-highlight {
   .dual-list-actions { flex-direction: row; flex-wrap: wrap; }
   .dual-list-actions .btn { flex: 1 1 40%; }
 
-  .theme-editor-container { grid-template-columns: 1fr !important; }
+  .theme-editor-container { grid-template-columns: minmax(0, 1fr) !important; }
   .theme-preview-panel { position: static !important; }
 }
 
@@ -6138,6 +6303,55 @@ mark.search-highlight {
   .section-header h1 { font-size: 1.1rem; }
   .wtr-options-bar { gap: 0.5rem 0.9rem; }
   .satellites-toolbar { margin: 0 1rem 0.75rem; }
+}
+
+/* ============================================================
+   PORTRAIT PHONES: hide descriptive intro/info blocks so the
+   working controls stay visible without scrolling past prose.
+   ============================================================ */
+@media (orientation: portrait) and (max-width: 900px) {
+  .firmware-info-card,
+  .library-info-content,
+  .info-help,
+  .tools-grid .card-body p,
+  .portrait-hide { display: none !important; }
+
+  /* Keep live load-status feedback visible (only the prose is hidden). */
+  #dmrLoadHint { display: block !important; }
+}
+
+/* ============================================================
+   CLONE RADIO - mobile layout
+   ============================================================ */
+@media (max-width: 768px) {
+  #section-clone-radio .settings-form-wide {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  #section-clone-radio .form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #section-clone-radio .form-row .btn {
+    width: 100%;
+  }
+  #clonePreview {
+    overflow-x: hidden;
+  }
+  #clonePreview table {
+    width: 100%;
+    table-layout: fixed;
+  }
+  #clonePreview td {
+    padding: 0.2rem 0.4rem 0.2rem 0;
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  #clonePreview td:first-child {
+    width: 42%;
+    white-space: normal !important;
+  }
 }
 
 /* ============================================================
@@ -6278,6 +6492,47 @@ html[data-theme="light"] .leaflet-control-attribution {
   width: auto;
   padding: 0.25rem 0.5rem;
   font-size: 0.8rem;
+}
+
+/* Column picker (choose visible table columns) */
+.column-picker {
+  position: relative;
+  display: inline-block;
+}
+.column-picker-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 1200;
+  min-width: 210px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-lg);
+  padding: 0.35rem;
+}
+.column-picker-menu.open {
+  display: block;
+}
+.column-picker-menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.column-picker-menu label:hover {
+  background: var(--bg-hover);
+}
+.column-picker-menu .column-picker-reset {
+  width: 100%;
+  margin-top: 0.35rem;
+  justify-content: center;
 }
 
 /* ============================================================
@@ -6490,4 +6745,138 @@ html[data-theme="light"] .leaflet-control-attribution {
 .melody-library-info small {
   color: var(--text-muted);
   font-size: 0.75rem;
+}
+
+/* ================================================================
+   MOBILE PAGE CHROME — compact per-page headers & filter bars
+   On portrait phones the per-page header (title + action buttons) and
+   the filter bars were stacking one control per row, so the header ate
+   the viewport and pushed the real content (tables, maps) out of sight.
+   Compact the header and let its actions wrap tightly, and lay the
+   filter bars out two-up instead of one-per-row.
+   ================================================================ */
+
+@media (max-width: 768px) {
+  /* ---------- Per-page header (title + actions) ---------- */
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .section-header h1 {
+    font-size: 1rem;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  /* Wrap into a couple of tight rows instead of one full-width button
+     per row. Buttons keep their own width so nothing is hidden. */
+  .section-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .section-actions .btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* Search shares the row rather than taking a full one. */
+  .section-actions .search-box {
+    flex: 1 1 150px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .section-actions .search-input {
+    width: 100%;
+    min-width: 0;
+    order: 0;
+    padding: 0.4rem 0;
+  }
+
+  /* ---------- Filter bars (repeaters / map / WTR) ---------- */
+  .repeater-filters,
+  .map-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 0.6rem;
+    padding: 0.65rem 0.75rem;
+    align-items: end;
+  }
+
+  /* Defeat inline widths (e.g. the WTR search field's 250px) so the
+     two-column grid can actually shrink to the viewport. */
+  .repeater-filters .filter-group,
+  .map-filters .filter-group {
+    min-width: 0 !important;
+  }
+
+  .repeater-filters .form-select,
+  .repeater-filters .form-input,
+  .map-filters .form-select,
+  .map-filters .form-input {
+    width: 100%;
+    min-height: 38px;
+  }
+
+  .repeater-filters .filter-group .btn,
+  .map-filters .filter-group .btn {
+    width: 100%;
+  }
+
+  /* Repeater search gets its own full-width row. */
+  .repeater-filters > .search-box {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .repeater-filters > .search-box .search-input { width: 100%; }
+
+  /* Standalone button groups span the row. */
+  #section-wtr-import .repeater-filters .filter-group:last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Let the WTR custom-range inputs share their cell (inline 80px). */
+  #wtrFreqMin,
+  #wtrFreqMax {
+    width: 100% !important;
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  /* ---------- Satellite toolbar ---------- */
+  .satellites-toolbar {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0.75rem 0.75rem;
+  }
+  .satellites-toolbar .btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Undo the legacy rule that forced every page action button onto its
+     own full-width row in portrait. */
+  .section-actions .btn {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .section-header h1 { font-size: 0.95rem; }
 }

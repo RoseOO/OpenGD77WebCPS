@@ -127,6 +127,9 @@ class Codeplug {
       menuHighlightBackground: '#FFFFFF',
       menuHighlightText: '#000080'
     };
+    // Full 32-colour day/night themes (Theme Editor). Null until chosen.
+    this.themeDay = null;
+    this.themeNight = null;
     // Band limits
     this.bandLimits = {
       vhfMin: 127000000,
@@ -135,8 +138,181 @@ class Codeplug {
       uhfMax: 564000000
     };
     
+    // Radio preferences (settingsStruct_t at EEPROM 0x604B). Null until a radio
+    // read or a .g77 import supplies them. `settingsRaw` is the 128-byte base
+    // blob preserved verbatim so writes keep the radio's own settings magic.
+    this.settings = null;
+    this.settingsRaw = null;
+    // Platform the decoded settings were read from / last encoded for.
+    this.settingsPlatform = null;
+    // Snapshot of the settings as read from the radio; writes patch only the
+    // differences from this so unrelated fields are never disturbed.
+    this.settingsBaseline = null;
+    // Struct shift detected on the last read (0 for standard, 4 for builds
+    // with an extra member before txPowerLevel, e.g. MD-UV380 Plus 10W).
+    this.settingsShift = 0;
+
+    // Raw firmware theme blocks (32 RGB565 colours each) as {day, night}.
+    // Populated by the Clone flow when "clone theme" is selected; stored in the
+    // JSON codeplug/cloud but not in .g77 files.
+    this.radioTheme = null;
+
+    // Raw custom boot blocks read from a radio: {image (1024B), melody (512B)}.
+    // Populated by the Clone flow when "clone boot screen" is selected.
+    this.radioBoot = null;
+    
     this.modified = false;
     this.filename = null;
+  }
+
+  /**
+   * Platform key used to decode the radio preferences blob. Prefers the
+   * currently connected radio (authoritative for a live read) and only falls
+   * back to the codeplug's stored type when no radio is connected. Getting this
+   * wrong makes a same-model write take the cross-platform path and stamp the
+   * wrong settings magic, which resets the radio to defaults.
+   */
+  getSettingsPlatform() {
+    if (typeof RadioSettings === 'undefined') return 'STM32';
+    // 1. The connected/detected radio is authoritative for a live read/write.
+    const connected = this.getConnectedPlatform();
+    if (connected) return connected;
+    // 2. Otherwise follow the user's top-bar radio selection, so a saved
+    // codeplug's own radioType can't make the preferences decode as a different
+    // platform while the top bar clearly shows another.
+    const selected = (typeof Utils !== 'undefined' && typeof Utils.getSavedRadioType === 'function')
+      ? Utils.getSavedRadioType() : null;
+    if (selected) return RadioSettings.getPlatformKey(selected, null);
+    // 3. Last resort: whatever the codeplug itself records.
+    return RadioSettings.getPlatformKey(this.general && this.general.radioType,
+      this.general && this.general.radioModel);
+  }
+
+  /**
+   * Platform of the radio currently connected over USB, or null when unknown.
+   * Used so a cross-model clone/preferences write encodes for the *target*
+   * platform (flag bit positions and settings magic differ between families).
+   */
+  getConnectedPlatform() {
+    if (typeof RadioSettings === 'undefined') return null;
+    const usb = (typeof window !== 'undefined') ? window.radioUSB : null;
+    if (!usb || !usb.connected) return null;
+    const type = (typeof usb.getRadioType === 'function') ? usb.getRadioType() : usb.radioType;
+    const model = usb.radioModel;
+    if (!type && !model) return null;
+    return RadioSettings.getPlatformKey(type, model);
+  }
+
+  /**
+   * Decode/import a raw settings blob (from a radio read or a .g77 file).
+   * Blobs without a plausible firmware magic are ignored so an unrelated/empty
+   * region (e.g. a bootloader read) can never be mistaken for preferences and
+   * later written back over the radio's real settings.
+   * @param {Uint8Array|Array<number>|null} raw
+   */
+  setSettingsRaw(raw) {
+    if (!raw) {
+      this.settingsRaw = null;
+      this.settings = null;
+      this.settingsPlatform = null;
+      this.settingsBaseline = null;
+      this.settingsShift = 0;
+      return;
+    }
+    const bytes = Uint8Array.from(raw);
+    // Resolve the platform from detection (connected radio), then the top-bar
+    // selection; the codeplug's own radioType is only a last resort. This keeps
+    // the decode in step with what the UI shows, so a stale codeplug cannot make
+    // preferences decode as a platform other than the selected one.
+    const platform = this.getSettingsPlatform();
+    if (typeof RadioSettings === 'undefined' ||
+        !RadioSettings.isMagicValid(bytes, platform)) {
+      this.settingsRaw = null;
+      this.settings = null;
+      this.settingsPlatform = null;
+      this.settingsBaseline = null;
+      this.settingsShift = 0;
+      return;
+    }
+    this.settingsRaw = bytes;
+    try {
+      this.settings = RadioSettings.decode(bytes, platform);
+      this.settingsPlatform = platform;
+      this.settingsBaseline = JSON.parse(JSON.stringify(this.settings));
+      this.settingsShift = this.settings.offsetShift || 0;
+      if (typeof console !== 'undefined' && console.debug) {
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        console.debug(`[preferences] raw @0x604B (${platform}, shift ${this.settingsShift}): ${hex}`);
+      }
+    } catch (e) {
+      this.settings = null;
+      this.settingsPlatform = null;
+      this.settingsBaseline = null;
+      this.settingsShift = 0;
+    }
+  }
+
+  /**
+   * Get the decoded preferences, creating firmware defaults if none are loaded.
+   */
+  getSettings() {
+    if (!this.settings && typeof RadioSettings !== 'undefined') {
+      this.settingsPlatform = this.getSettingsPlatform();
+      this.settings = RadioSettings.defaults(this.settingsPlatform);
+      this.settings.offsetShift = this.settingsShift || 0;
+    }
+    return this.settings;
+  }
+
+  /**
+   * Encode the current preferences to a 128-byte blob for writing to a radio.
+   *
+   * The blob is encoded for the *connected* radio's platform. When that differs
+   * from the platform the settings were read from (cross-model clone), flags are
+   * remapped by name to the target's bit positions and the target's current
+   * settings magic is used, so the firmware accepts the block instead of
+   * resetting to defaults.
+   *
+   * @returns {Uint8Array|null}
+   */
+  encodeSettings() {
+    if (typeof RadioSettings === 'undefined') return null;
+    if (!this.settings && !this.settingsRaw) return null;
+
+    const sourcePlatform = this.settingsPlatform || this.getSettingsPlatform();
+    const targetPlatform = this.getConnectedPlatform() || sourcePlatform;
+    const samePlatform = targetPlatform === sourcePlatform;
+
+    const settings = this.settings || RadioSettings.defaults(sourcePlatform);
+    // Same platform: patch the source blob so its magic and any fields we do not
+    // model are preserved, and only write the fields that changed. Cross-platform:
+    // start fresh for the target platform and write every field.
+    const base = samePlatform ? this.settingsRaw : null;
+    const baseline = samePlatform ? this.settingsBaseline : null;
+    const toEncode = samePlatform
+      ? settings
+      : RadioSettings.remap(settings, sourcePlatform, targetPlatform);
+
+    const encoded = RadioSettings.encode(toEncode, targetPlatform, base, baseline);
+
+    // Record (and log) which bytes differ from the radio's blob. Handy when a
+    // single preference edit appears to disturb the display.
+    if (samePlatform && this.settingsRaw && encoded) {
+      const diffs = [];
+      for (let i = 0; i < encoded.length; i++) {
+        if (encoded[i] !== this.settingsRaw[i]) {
+          diffs.push(`${i}:0x${this.settingsRaw[i].toString(16)}->0x${encoded[i].toString(16)}`);
+        }
+      }
+      this.settingsLastDiff = diffs;
+      if (diffs.length && typeof console !== 'undefined' && console.log) {
+        console.log('[preferences] changed bytes:', diffs.join(', '));
+      }
+    } else {
+      this.settingsLastDiff = null;
+    }
+
+    return encoded;
   }
 
   /**
@@ -485,9 +661,9 @@ class Codeplug {
       id: Utils.generateId(),
       name: overrides.name || 'New APRS',
       ssid: overrides.ssid || 9,
-      via1: overrides.via1 || 'WIDE1',
+      via1: overrides.via1 !== undefined ? overrides.via1 : 'WIDE1',
       via1SSID: overrides.via1SSID !== undefined ? overrides.via1SSID : (overrides.via1Ssid !== undefined ? overrides.via1Ssid : 1),
-      via2: overrides.via2 || 'WIDE2',
+      via2: overrides.via2 !== undefined ? overrides.via2 : 'WIDE2',
       via2SSID: overrides.via2SSID !== undefined ? overrides.via2SSID : (overrides.via2Ssid !== undefined ? overrides.via2Ssid : 1),
       iconTable: overrides.iconTable || 0,
       iconIndex: overrides.iconIndex !== undefined ? overrides.iconIndex : (overrides.icon !== undefined ? overrides.icon : 24),
@@ -603,6 +779,7 @@ class Codeplug {
   loadDefaultSatellites() {
     this.satellites = [];
     for (const sat of CONFIG.DEFAULT_SATELLITES) {
+      if (this.satellites.length >= CONFIG.LIMITS.MAX_SATELLITES) break;
       this.addSatellite({ ...sat });
     }
     this.modified = true;
@@ -689,7 +866,13 @@ class Codeplug {
       
       const channel = this.createChannel({
         name: Utils.truncate(row['Channel Name'] || '', CONFIG.LIMITS.CHANNEL_NAME_LEN),
-        type: row['Channel Type'] === 'Digital' ? CONFIG.CHANNEL_TYPES.DIGITAL : CONFIG.CHANNEL_TYPES.ANALOG,
+        type: (() => {
+          const ct = String(row['Channel Type'] || '').trim().toLowerCase();
+          if (ct === 'digital' || ct === 'dmr') return CONFIG.CHANNEL_TYPES.DIGITAL;
+          if (ct === 'am') return CONFIG.CHANNEL_TYPES.AM;
+          if (ct.includes('broadcast') || ct === 'fm+' || ct === 'wfm') return CONFIG.CHANNEL_TYPES.FM_BROADCAST;
+          return CONFIG.CHANNEL_TYPES.ANALOG;
+        })(),
         rxFreq: Utils.parseFrequency(row['Rx Frequency']),
         txFreq: Utils.parseFrequency(row['Tx Frequency']),
         bandwidth: parseFloat(row['Bandwidth (kHz)']) || 12.5,
@@ -969,10 +1152,12 @@ class Codeplug {
     const rows = this.channels.map(ch => ({
       'Channel Number': ch.number,
       'Channel Name': ch.name,
-      'Channel Type': ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'Digital' : 'Analogue',
+      'Channel Type': ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'Digital' :
+        ch.type === CONFIG.CHANNEL_TYPES.AM ? 'AM' :
+        ch.type === CONFIG.CHANNEL_TYPES.FM_BROADCAST ? 'FM Broadcast' : 'Analogue',
       'Rx Frequency': '\t' + Utils.formatFrequency(ch.rxFreq),
       'Tx Frequency': '\t' + Utils.formatFrequency(ch.txFreq),
-      'Bandwidth (kHz)': ch.type === CONFIG.CHANNEL_TYPES.ANALOG ? ch.bandwidth : '',
+      'Bandwidth (kHz)': ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? '' : ch.bandwidth,
       'Colour Code': ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? ch.colorCode : '',
       'Timeslot': ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? ch.timeslot : '',
       'Contact': ch.contact || '',
@@ -1402,6 +1587,24 @@ class Codeplug {
   }
 
   /**
+   * Names of channels/VFOs that use modes only the DM-32 / UV008 (C7000)
+   * firmware understands. These serialise to chMode 2 (FM Broadcast) or 3 (AM);
+   * other firmware treats anything other than 0 as Digital, so a codeplug
+   * containing them must not be written to a non-DM32 radio.
+   * @returns {string[]} display names of offending channels/VFOs
+   */
+  getDm32OnlyModeEntries() {
+    const isDm32Only = (t) => t === CONFIG.CHANNEL_TYPES.AM || t === CONFIG.CHANNEL_TYPES.FM_BROADCAST;
+    const names = [];
+    for (const ch of (this.channels || [])) {
+      if (isDm32Only(ch.type)) names.push(ch.name);
+    }
+    if (this.vfoA && isDm32Only(this.vfoA.type)) names.push('VFO A');
+    if (this.vfoB && isDm32Only(this.vfoB.type)) names.push('VFO B');
+    return names;
+  }
+
+  /**
    * Export codeplug to G77 binary format
    * @returns {ArrayBuffer} The G77 binary data
    */
@@ -1448,9 +1651,15 @@ class Codeplug {
       scanLists: this.scanLists,
       satellites: this.satellites,
       theme: this.theme,
+      themeDay: this.themeDay,
+      themeNight: this.themeNight,
       bandLimits: this.bandLimits,
       vfoA: this.vfoA,
-      vfoB: this.vfoB
+      vfoB: this.vfoB,
+      settings: this.settings,
+      settingsRaw: this.settingsRaw ? Array.from(this.settingsRaw) : null,
+      radioTheme: this.radioTheme,
+      radioBoot: this.radioBoot
     };
   }
 
@@ -1472,11 +1681,25 @@ class Codeplug {
     this.dtmf = asArray(data.dtmf);
     this.dtmfSettings = data.dtmfSettings || this.dtmfSettings;
     this.scanLists = asArray(data.scanLists);
-    this.satellites = asArray(data.satellites);
+    this.satellites = asArray(data.satellites).slice(0, CONFIG.LIMITS.MAX_SATELLITES);
     this.theme = data.theme || this.theme;
+    this.themeDay = data.themeDay || this.themeDay;
+    this.themeNight = data.themeNight || this.themeNight;
     this.bandLimits = data.bandLimits || this.bandLimits;
     this.vfoA = data.vfoA || this.vfoA;
     this.vfoB = data.vfoB || this.vfoB;
+
+    // Radio preferences: prefer the saved decoded settings, fall back to raw.
+    // The raw is decoded with the detection/top-bar platform (getSettingsPlatform).
+    this.setSettingsRaw(data.settingsRaw || null);
+    if (data.settings) {
+      // Keep settings and baseline consistent so a restore can't look like the
+      // user changed preferences and push the saved values over the radio.
+      this.settings = data.settings;
+      this.settingsBaseline = JSON.parse(JSON.stringify(data.settings));
+    }
+    this.radioTheme = data.radioTheme || null;
+    this.radioBoot = data.radioBoot || null;
 
     // Ensure all items have IDs. IDs from an imported/shared JSON end up in
     // inline HTML event handlers, so reject anything that is not a simple token

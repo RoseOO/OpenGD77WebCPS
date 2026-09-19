@@ -140,6 +140,115 @@ const App = {
   },
 
   /**
+   * Standalone build: no health check / analytics backend.
+   */
+  async checkApiHealth() {
+    return true;
+  },
+
+  /**
+   * Collect client analytics data for the OpenGD77 CPS
+   */
+  collectAnalyticsData() {
+    const ua = navigator.userAgent;
+    
+    // Parse browser info
+    let browserName = 'Unknown';
+    let browserVersion = null;
+    
+    if (ua.includes('Firefox/')) {
+      browserName = 'Firefox';
+      const match = ua.match(/Firefox\/(\d+(?:\.\d+)?)/);
+      browserVersion = match ? match[1] : null;
+    } else if (ua.includes('Edg/')) {
+      browserName = 'Edge';
+      const match = ua.match(/Edg\/(\d+(?:\.\d+)?)/);
+      browserVersion = match ? match[1] : null;
+    } else if (ua.includes('Chrome/')) {
+      browserName = 'Chrome';
+      const match = ua.match(/Chrome\/(\d+(?:\.\d+)?)/);
+      browserVersion = match ? match[1] : null;
+    } else if (ua.includes('Safari/') && !ua.includes('Chrome')) {
+      browserName = 'Safari';
+      const match = ua.match(/Version\/(\d+(?:\.\d+)?)/);
+      browserVersion = match ? match[1] : null;
+    } else if (ua.includes('Opera') || ua.includes('OPR/')) {
+      browserName = 'Opera';
+      const match = ua.match(/(?:Opera|OPR)\/(\d+(?:\.\d+)?)/);
+      browserVersion = match ? match[1] : null;
+    }
+    
+    // Parse OS info
+    let osName = 'Unknown';
+    let osVersion = null;
+    
+    if (ua.includes('Windows NT')) {
+      osName = 'Windows';
+      const match = ua.match(/Windows NT (\d+(?:\.\d+)?)/);
+      if (match) {
+        const ntVersion = match[1];
+        const versionMap = {
+          '10.0': '10/11',
+          '6.3': '8.1',
+          '6.2': '8',
+          '6.1': '7',
+          '6.0': 'Vista',
+          '5.1': 'XP'
+        };
+        osVersion = versionMap[ntVersion] || ntVersion;
+      }
+    } else if (ua.includes('Mac OS X')) {
+      osName = 'macOS';
+      const match = ua.match(/Mac OS X (\d+[._]\d+(?:[._]\d+)?)/);
+      osVersion = match ? match[1].replace(/_/g, '.') : null;
+    } else if (ua.includes('Linux')) {
+      osName = 'Linux';
+      if (ua.includes('Android')) {
+        osName = 'Android';
+        const match = ua.match(/Android (\d+(?:\.\d+)?)/);
+        osVersion = match ? match[1] : null;
+      }
+    } else if (ua.includes('iPhone') || ua.includes('iPad')) {
+      osName = 'iOS';
+      const match = ua.match(/OS (\d+[._]\d+(?:[._]\d+)?)/);
+      osVersion = match ? match[1].replace(/_/g, '.') : null;
+    }
+    
+    // Device type detection
+    let deviceType = 'Desktop';
+    if (ua.includes('Mobile') || (ua.includes('Android') && !ua.includes('Tablet'))) {
+      deviceType = 'Mobile';
+    } else if (ua.includes('Tablet') || ua.includes('iPad')) {
+      deviceType = 'Tablet';
+    }
+    
+    // Get or create session ID
+    let sessionId = sessionStorage.getItem('gr_opengd77_session_id');
+    if (!sessionId) {
+      sessionId = 'gro_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
+      sessionStorage.setItem('gr_opengd77_session_id', sessionId);
+    }
+    
+    return {
+      source: 'opengd77',
+      browserName: browserName,
+      browserVersion: browserVersion,
+      osName: osName,
+      osVersion: osVersion,
+      deviceType: deviceType,
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      language: navigator.language || navigator.userLanguage,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      referrer: document.referrer || null,
+      landingPage: window.location.pathname,
+      sessionId: sessionId
+    };
+  },
+
+  /**
    * IDs of all body buttons that read from or write to the radio.
    * When no radio is connected, these are replaced with a Connect button.
    * Header buttons (readCodeplugBtn, writeCodeplugBtn) are handled separately
@@ -326,6 +435,11 @@ const App = {
       if (savedCodeplug) {
         window.codeplug.fromJSON(savedCodeplug);
         UI.updateOverview();
+        // UI.init() already rendered the restored section - before this codeplug
+        // was loaded - so re-render it now that the data is present.
+        if (typeof UI.loadSectionData === 'function' && UI.currentSection) {
+          UI.loadSectionData(UI.currentSection);
+        }
         Utils.toast('Restored previous session', 'info');
       }
     } catch (error) {
@@ -666,7 +780,12 @@ const App = {
       if (selectedType === CONFIG.RADIO_TYPES.DM32) {
         await window.radioUSB.connectSerial();
       } else {
-        await window.radioUSB.connect();
+        // Try to re-acquire an already-authorised radio silently (e.g. after a
+        // reboot or page reload) before falling back to the device chooser.
+        const reconnected = await window.radioUSB.tryReconnect();
+        if (!reconnected) {
+          await window.radioUSB.connect();
+        }
       }
       
       // Only read radio info if NOT in DFU mode
@@ -711,6 +830,10 @@ const App = {
    * Read codeplug from radio
    */
   async readFromRadio() {
+    if (window.radioUSB?.isInDFUMode) {
+      Utils.toast('Radio is in firmware update (DFU) mode - reading a codeplug is unavailable. Reconnect in normal mode.', 'warning');
+      return;
+    }
     try {
       this.updateRadioStatus('busy', 'Reading codeplug...');
       
@@ -829,52 +952,83 @@ const App = {
       confirmClass: 'btn-danger',
       onConfirm: async () => {
         UI.hideModal();
-        
-        try {
-          this.updateRadioStatus('busy', 'Writing codeplug... 0%');
-          
-          // Initialize and show progress bar
-          const progressContainer = document.getElementById('radioToolsProgress');
-          if (progressContainer) {
-            progressContainer.style.display = 'block';
-          }
-          this.updateProgress(0, 'Preparing to write...');
-          
-          // Serialize the codeplug to G77 binary format
-          const buffer = window.codeplug.exportG77();
-          const data = new Uint8Array(buffer);
-          
-          // Set extended channel data for scanner mode write (channels 1025+)
-          if (window.codeplug._extendedChannelData) {
-            window.radioUSB.extendedChannelData = window.codeplug._extendedChannelData;
-            window.radioUSB._extendedBitmaps = window.codeplug._extendedBitmaps;
-          }
-          
-          await window.radioUSB.writeCodeplug(data, (progress) => {
-            const progressMsg = `Writing codeplug... ${Math.round(progress)}%`;
-            this.updateProgress(progress, progressMsg);
-            // Also update the top status bar with the percentage
-            this.updateRadioStatus('busy', progressMsg);
-          });
-          
-          Utils.toast('Codeplug written successfully', 'success');
-          this.updateStatus('Write complete');
-          this.updateRadioStatus('connected', 'Connected');
-          
-        } catch (error) {
-          Utils.toast('Write failed: ' + error.message, 'error');
-          this.updateStatus('Write failed');
-          this.updateRadioStatus(window.radioUSB?.connected ? 'connected' : 'disconnected',
-            window.radioUSB?.connected ? 'Connected' : 'No Radio Connected');
-          
-          // Hide progress bar on error
-          const progressContainer = document.getElementById('radioToolsProgress');
-          if (progressContainer) {
-            progressContainer.style.display = 'none';
-          }
-        }
+        await this._doCodeplugWrite(null);
       }
     });
+  },
+
+  /**
+   * Perform a codeplug write.
+   * @param {Uint8Array|null} settingsBytes Optional preferences blob written in
+   *   the same session. Only the Clone flow passes this (when "also clone radio
+   *   preferences" is ticked); the normal Write Codeplug button passes null so
+   *   preferences are never touched by a plain codeplug write.
+   * @returns {Promise<boolean>} true on success
+   */
+  async _doCodeplugWrite(settingsBytes) {
+    if (window.radioUSB?.isInDFUMode) {
+      Utils.toast('Radio is in firmware update (DFU) mode - writing a codeplug is unavailable. Reconnect in normal mode.', 'warning');
+      return false;
+    }
+    try {
+      // Gate DM32-only modes. AM and FM Broadcast serialise to chMode 2/3, which
+      // every other platform's firmware interprets as Digital, so refuse to
+      // write them to anything except the DM-32 / UV008 (C7000).
+      const targetRadioType = window.radioUSB?.getRadioType?.() ||
+        window.radioUSB?.radioType || Utils.getSavedRadioType?.();
+      if (targetRadioType !== CONFIG.RADIO_TYPES.DM32) {
+        const dm32Only = window.codeplug.getDm32OnlyModeEntries?.() || [];
+        if (dm32Only.length) {
+          const shown = dm32Only.slice(0, 5).join(', ') +
+            (dm32Only.length > 5 ? `, +${dm32Only.length - 5} more` : '');
+          throw new Error(`AM and FM Broadcast channels are only supported by the DM-32 / UV008 (C7000). Change or remove: ${shown}`);
+        }
+      }
+
+      this.updateRadioStatus('busy', 'Writing codeplug... 0%');
+
+      // Initialize and show progress bar
+      const progressContainer = document.getElementById('radioToolsProgress');
+      if (progressContainer) {
+        progressContainer.style.display = 'block';
+      }
+      this.updateProgress(0, 'Preparing to write...');
+
+      // Serialize the codeplug to G77 binary format
+      const buffer = window.codeplug.exportG77();
+      const data = new Uint8Array(buffer);
+
+      // Set extended channel data for scanner mode write (channels 1025+)
+      if (window.codeplug._extendedChannelData) {
+        window.radioUSB.extendedChannelData = window.codeplug._extendedChannelData;
+        window.radioUSB._extendedBitmaps = window.codeplug._extendedBitmaps;
+      }
+
+      await window.radioUSB.writeCodeplug(data, (progress) => {
+        const progressMsg = `Writing codeplug... ${Math.round(progress)}%`;
+        this.updateProgress(progress, progressMsg);
+        // Also update the top status bar with the percentage
+        this.updateRadioStatus('busy', progressMsg);
+      }, { settingsBytes: settingsBytes || null });
+
+      Utils.toast('Codeplug written successfully', 'success');
+      this.updateStatus('Write complete');
+      this.updateRadioStatus('connected', 'Connected');
+      return true;
+
+    } catch (error) {
+      Utils.toast('Write failed: ' + error.message, 'error');
+      this.updateStatus('Write failed');
+      this.updateRadioStatus(window.radioUSB?.connected ? 'connected' : 'disconnected',
+        window.radioUSB?.connected ? 'Connected' : 'No Radio Connected');
+
+      // Hide progress bar on error
+      const progressContainer = document.getElementById('radioToolsProgress');
+      if (progressContainer) {
+        progressContainer.style.display = 'none';
+      }
+      return false;
+    }
   },
 
   /**
@@ -3794,6 +3948,13 @@ Object.assign(UI, {
     const countEl = document.getElementById('dmrDbCount');
     const dateEl = document.getElementById('dmrDbDate');
 
+    // If a radio is connected, re-run detection so the capacity shown reflects
+    // it (a silent reconnect can otherwise leave the selector on a stale
+    // default and make the radio look like it holds very few DMR IDs).
+    if (window.radioUSB?.connected && typeof UI !== 'undefined' && UI.autoDetectDMRRadioType) {
+      UI.autoDetectDMRRadioType();
+    }
+
     try {
       const all = await Utils.db.getAll('dmrDatabase');
       const meta = all.find(e => e.id === 'metadata');
@@ -4110,9 +4271,14 @@ Object.assign(UI, {
       const useVPMemory = settings.useVPMemory;
       const radioTypeIndex = settings.radioTypeIndex;
       
-      // Calculate memory size and max records using CPS formulas
-      const memorySize = UI.getSelectedRadioMemorySize(radioTypeIndex, useVPMemory);
-      const maxRecords = UI.getMaxRecords(memorySize, recordSize);
+      // Calculate memory size and max records using CPS formulas. The C7000 /
+      // DM-32 (index 6) is bounded by the firmware's address window, not the
+      // DMRID_MEMORY_SIZES table.
+      const isC7000 = UI.isDM32Radio() || UI.isC7000DMRIndex(radioTypeIndex);
+      const memorySize = isC7000 ? 0 : UI.getSelectedRadioMemorySize(radioTypeIndex, useVPMemory);
+      const maxRecords = isC7000
+        ? UI.getDM32MaxRecords(recordSize, useVPMemory)
+        : UI.getMaxRecords(memorySize, recordSize);
       
       const HEADER_SIZE = CONFIG.PROTOCOL.DMRID_HEADER_SIZE;  // 12 bytes
       
@@ -5188,76 +5354,66 @@ Object.assign(App, {
     try {
       const data = await API.importSharedSatelliteConfig(id);
       const satellites = data.satellites || [];
-      
       if (satellites.length === 0) {
         Utils.toast('No satellites to import', 'warning');
         return;
       }
-      
-      // Ask user whether to replace or merge
-      const currentCount = window.codeplug.satellites.length;
-      
-      if (currentCount > 0) {
-        UI.showModal('Import Satellites', `
-          <p>You have <strong>${currentCount}</strong> satellites in your current codeplug.</p>
-          <p>How would you like to import the <strong>${satellites.length}</strong> new satellites?</p>
-        `, {
-          confirmText: 'Replace All',
-          cancelText: 'Merge',
-          onConfirm: () => {
-            // Replace all satellites - direct assignment is safe here as we immediately
-            // repopulate using addSatellite() which handles validation and ID generation
-            window.codeplug.satellites = [];
-            window.codeplug.modified = true;
-            satellites.forEach(sat => {
-              try {
-                window.codeplug.addSatellite(sat);
-              } catch (e) {
-                console.warn('Failed to add satellite:', sat.name, e);
-              }
-            });
-            UI.hideModal();
-            UI.renderSatellites();
-            Utils.toast(`Replaced with ${window.codeplug.satellites.length} satellites`, 'success');
-          },
-          onCancel: () => {
-            // Merge - check for duplicates by comparing name AND catalogue number
-            // This provides a more robust duplicate detection than name alone
-            let added = 0;
-            satellites.forEach(sat => {
-              const exists = window.codeplug.satellites.some(s => 
-                s.name === sat.name || 
-                (sat.catalogueNumber && s.catalogueNumber === sat.catalogueNumber)
-              );
-              if (!exists) {
-                try {
-                  window.codeplug.addSatellite(sat);
-                  added++;
-                } catch (e) {
-                  console.warn('Failed to add satellite:', sat.name, e);
-                }
-              }
-            });
-            UI.hideModal();
-            UI.renderSatellites();
-            Utils.toast(`Added ${added} new satellites (${satellites.length - added} duplicates skipped)`, 'success');
-          }
-        });
-      } else {
-        // No existing satellites, just add all
-        satellites.forEach(sat => {
-          try {
-            window.codeplug.addSatellite(sat);
-          } catch (e) {
-            console.warn('Failed to add satellite:', sat.name, e);
-          }
-        });
-        UI.renderSatellites();
-        Utils.toast(`Imported ${window.codeplug.satellites.length} satellites`, 'success');
-      }
-      
+
+      const noradOf = (v) => String(v || '').replace(/[A-Za-z]+$/, '').trim();
+      const rows = satellites.map((sat, i) => {
+        const norad = noradOf(sat.catalogueNumber);
+        const exists = window.codeplug.satellites.some(s =>
+          s.name === sat.name || (norad && noradOf(s.catalogueNumber) === norad));
+        return `<label style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; font-size:0.9rem;">
+          <input type="checkbox" data-idx="${i}" ${exists ? '' : 'checked'}>
+          <span style="flex:1;"><strong>${Utils.escapeHtml(sat.name)}</strong> <small style="color:var(--text-muted);">${Utils.escapeHtml(sat.catalogueNumber || '')}${exists ? ' · already in codeplug' : ''}</small></span>
+        </label>`;
+      }).join('');
+
+      UI.showModal('Import Shared Satellites', `
+        <p>Choose which satellites to merge into your codeplug (existing ones are skipped).</p>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+          <button type="button" class="btn btn-sm btn-secondary" id="satImpAll">Select All</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="satImpNone">Deselect All</button>
+        </div>
+        <div style="max-height:45vh; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:0.4rem 0.6rem;">${rows}</div>
+      `, {
+        confirmText: 'Merge Selected',
+        onConfirm: () => {
+          const checked = [...document.querySelectorAll('#modalBody input[type="checkbox"][data-idx]:checked')].map(cb => parseInt(cb.dataset.idx, 10));
+          UI.hideModal();
+          UI.mergeSharedSatellites(checked.map(i => satellites[i]).filter(Boolean));
+        }
+      });
+      document.getElementById('satImpAll')?.addEventListener('click', () => document.querySelectorAll('#modalBody input[data-idx]').forEach(cb => { cb.checked = true; }));
+      document.getElementById('satImpNone')?.addEventListener('click', () => document.querySelectorAll('#modalBody input[data-idx]').forEach(cb => { cb.checked = false; }));
+
     } catch (error) {
       Utils.toast('Failed to import satellites: ' + error.message, 'error');
+    }
+  },
+
+  /**
+   * Merge a chosen set of satellites into the codeplug (dedupe by name or
+   * catalogue number, capped at the firmware limit), then refresh TLEs.
+   */
+  async mergeSharedSatellites(list) {
+    const noradOf = (v) => String(v || '').replace(/[A-Za-z]+$/, '').trim();
+    let added = 0, skipped = 0;
+    (list || []).forEach(sat => {
+      const norad = noradOf(sat.catalogueNumber);
+      const exists = window.codeplug.satellites.some(s =>
+        s.name === sat.name || (norad && noradOf(s.catalogueNumber) === norad));
+      if (exists) { skipped++; return; }
+      try { window.codeplug.addSatellite(sat); added++; }
+      catch (e) { skipped++; }
+    });
+    window.codeplug.modified = true;
+    UI.renderSatellites();
+    if (UI.updateOverview) UI.updateOverview();
+    Utils.toast(`Added ${added} satellite${added !== 1 ? 's' : ''}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+    if (added > 0 && !UI._tleUpdatedThisSession) {
+      await UI.autoUpdateTLEs();
     }
   },
   
@@ -5415,7 +5571,7 @@ Object.assign(App, {
                         <td>${Utils.escapeHtml(ch.name)}</td>
                         <td>${ch.rxFreq} MHz</td>
                         <td>${ch.txFreq} MHz</td>
-                        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'DMR' : 'FM'}</td>
+                        <td>${UI.channelModeAbbrev(ch)}</td>
                       </tr>
                     `).join('')}
                     ${channels.length > 20 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">... and ${channels.length - 20} more channels</td></tr>` : ''}
@@ -5511,7 +5667,7 @@ Object.assign(App, {
                         <td>${Utils.escapeHtml(ch.name)}</td>
                         <td>${ch.rxFreq} MHz</td>
                         <td>${ch.txFreq} MHz</td>
-                        <td>${ch.type === CONFIG.CHANNEL_TYPES.DIGITAL ? 'DMR' : 'FM'}</td>
+                        <td>${UI.channelModeAbbrev(ch)}</td>
                       </tr>
                     `).join('')}
                     ${channels.length > 20 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">... and ${channels.length - 20} more channels</td></tr>` : ''}
